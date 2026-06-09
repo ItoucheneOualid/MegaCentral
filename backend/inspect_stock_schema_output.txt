@@ -1,0 +1,67 @@
+----- articles columns -----
+ARCLEUNIK	int(10) unsigned	NO	PRI	null
+LIBELLE	varchar(60)	NO	MUL	null
+Code_Barres	varchar(15)	YES	MUL	null
+Prix_TTC1	decimal(12,2)	YES		null
+Prix_TTC2	decimal(12,2)	YES		null
+Prix_TTC3	decimal(12,2)	YES		null
+Prix_TTC4	decimal(12,2)	YES		null
+Prix_TTC5	decimal(12,2)	YES		null
+Prix_Vente_HT	decimal(12,2)	YES		null
+Prix_Achat_HT	decimal(12,2)	YES		null
+Prix_Achat_TTC	decimal(12,2)	YES		null
+Prix_Sur_Qte	decimal(12,2)	YES		null
+Prix_Qte_Min	smallint(6)	YES		null
+Unite	varchar(6)	YES		null
+Emballage	varchar(12)	YES		null
+F1_Cleunik	int(10) unsigned	YES	MUL	null
+F2_CLEUNIK	int(10) unsigned	YES	MUL	null
+TVA_CLEUNIK	int(11)	YES	MUL	null
+FRN_CLEUNIK	int(10) unsigned	YES	MUL	null
+FRN_Reference	varchar(15)	YES	MUL	null
+Promo_Prix_TTC	decimal(12,2)	YES		null
+Promo_Date_Debut	date	YES		null
+Promo_Date_Fin	date	YES		null
+Date_Modifiée	date	YES	MUL	null
+Date_importation	date	YES		null
+Exporté_àCentral	tinyint(1)	NO	MUL	0
+Qte_Min	smallint(6)	YES		null
+Qte_Max	smallint(6)	YES		null
+Gestion_Stock	tinyint(1)	NO		0
+Vidange_Code	decimal(12,2)	YES		null
+Vidange_Article	tinyint(1)	NO		0
+Article_àPeser	tinyint(1)	NO		0
+Photo_ID	decimal(12,2)	YES		null
+Nouvelligne	tinyint(1)	NO		0
+Marge_Pc1	decimal(12,2)	YES		null
+RemiseMax	decimal(12,2)	YES		null
+Points_Action	smallint(6)	YES		null
+Qte_par_boite	decimal(12,2)	YES		null
+Cat_Electronic	tinyint(1)	NO		0
+Poids_Un	decimal(12,2)	YES		null
+Suspendu	tinyint(1)	NO		0
+Suspendu_Date	date	YES		null
+ingédients_FR	text	YES		null
+ingédients_NL	text	YES		null
+Valeurs_Nutritionelles	text	YES		null
+ExtraField1	varchar(30)	YES		null
+ExtraField2	decimal(12,2)	YES		null
+Derniere_MAJ	date	YES		null
+Frais_Accise	decimal(12,2)	YES		null
+Frais_Transport	decimal(12,2)	YES		null
+Prix_revient	decimal(12,2)	YES		null
+manage_stock	tinyint(1)	NO		1
+
+----- stock_magasin columns -----
+id	int(11)	NO	PRI	null
+magasin_id	int(11)	NO	MUL	null
+article_id	int(10) unsigned	NO	MUL	null
+quantite_stock	decimal(12,2)	NO		0.00
+seuil_min	decimal(12,2)	YES		null
+seuil_max	decimal(12,2)	YES		null
+
+----- magasin columns -----
+id	int(11)	NO	PRI	null
+Code_Magasin	varchar(45)	YES		null
+Nom_Magasin	varchar(45)	YES		null
+Derniere_MAJ	date	YES		null

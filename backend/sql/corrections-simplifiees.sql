@@ -1,0 +1,144 @@
+-- =====================================================
+-- CORRECTIONS PROFESSIONNELLES SIMPLIFIÉES
+-- =====================================================
+
+-- 1. CRÉATION DE STOCKS POUR TOUS LES ARTICLES MANQUANTS
+-- =====================================================
+INSERT IGNORE INTO stock_magasin (magasin_id, article_id, quantite_stock, seuil_min, seuil_max)
+SELECT 
+    m.id as magasin_id,
+    a.ARCLEUNIK as article_id,
+    0.00 as quantite_stock,
+    5.00 as seuil_min,
+    100.00 as seuil_max
+FROM articles a
+CROSS JOIN magasin m
+WHERE a.ARCLEUNIK NOT IN (
+    SELECT DISTINCT article_id 
+    FROM stock_magasin 
+    WHERE article_id IS NOT NULL
+);
+
+-- 2. AJOUT D'INDEX POUR LES PERFORMANCES
+-- =====================================================
+CREATE INDEX IF NOT EXISTS idx_stock_article ON stock_magasin(article_id);
+CREATE INDEX IF NOT EXISTS idx_stock_magasin ON stock_magasin(magasin_id);
+CREATE INDEX IF NOT EXISTS idx_stock_magasin_article ON stock_magasin(magasin_id, article_id);
+CREATE INDEX IF NOT EXISTS idx_stock_seuil_min ON stock_magasin(seuil_min, quantite_stock);
+
+-- 3. VUE AMÉLIORÉE POUR LA GESTION DES STOCKS
+-- =====================================================
+DROP VIEW IF EXISTS vue_stocks_complets;
+
+CREATE VIEW vue_stocks_complets AS
+SELECT 
+    sm.id as stock_id,
+    sm.magasin_id,
+    m.Code_Magasin as code_magasin,
+    m.Nom_Magasin as nom_magasin,
+    sm.article_id,
+    a.LIBELLE as libelle_article,
+    a.Code_Barres as code_barres,
+    a.Prix_TTC1 as prix_vente_ttc,
+    COALESCE(a.Prix_HT1, 0) as prix_achat_ht,
+    sm.quantite_stock,
+    sm.seuil_min,
+    sm.seuil_max,
+    -- Calcul du niveau d'alerte
+    CASE 
+        WHEN sm.seuil_min IS NOT NULL AND sm.quantite_stock <= sm.seuil_min THEN 'CRITIQUE'
+        WHEN sm.seuil_min IS NOT NULL AND sm.quantite_stock <= (sm.seuil_min * 1.2) THEN 'FAIBLE'
+        WHEN sm.seuil_max IS NOT NULL AND sm.quantite_stock >= sm.seuil_max THEN 'EXCESSIF'
+        ELSE 'NORMAL'
+    END as niveau_alerte,
+    -- Calcul de la valeur du stock
+    (sm.quantite_stock * a.Prix_TTC1) as valeur_stock_ttc,
+    -- Calcul de la marge potentielle
+    (a.Prix_TTC1 - COALESCE(a.Prix_HT1, 0)) as marge_unitaire,
+    (sm.quantite_stock * (a.Prix_TTC1 - COALESCE(a.Prix_HT1, 0))) as marge_totale,
+    -- Date de dernière mise à jour
+    COALESCE(sm.updated_at, NOW()) as date_maj,
+    -- Calcul du taux de rotation (basé sur les ventes des 30 derniers jours)
+    COALESCE(
+        (SELECT SUM(lv.quantite) 
+         FROM ligne_vente lv 
+         JOIN ventes v ON lv.VCLEUNIK = v.VCLEUNIK 
+         WHERE lv.ARCLEUNIK = sm.article_id 
+         AND v.Magasin = sm.magasin_id 
+         AND v.Date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        ), 0
+    ) as ventes_30_jours
+FROM stock_magasin sm
+LEFT JOIN magasin m ON sm.magasin_id = m.id
+LEFT JOIN articles a ON sm.article_id = a.ARCLEUNIK
+WHERE sm.article_id IS NOT NULL
+ORDER BY m.Nom_Magasin, a.LIBELLE;
+
+-- 4. VUE POUR LES ARTICLES SANS STOCK
+-- =====================================================
+CREATE VIEW vue_articles_sans_stock AS
+SELECT 
+    a.ARCLEUNIK as article_id,
+    a.LIBELLE as libelle_article,
+    a.Code_Barres as code_barres,
+    a.Prix_TTC1 as prix_vente_ttc,
+    'SANS_STOCK' as statut
+FROM articles a
+WHERE a.ARCLEUNIK NOT IN (
+    SELECT DISTINCT article_id 
+    FROM stock_magasin 
+    WHERE article_id IS NOT NULL
+)
+ORDER BY a.LIBELLE;
+
+-- 5. VUE POUR LES STATISTIQUES DE STOCKS
+-- =====================================================
+CREATE VIEW vue_statistiques_stocks AS
+SELECT 
+    COUNT(*) as total_articles,
+    COUNT(CASE WHEN niveau_alerte = 'CRITIQUE' THEN 1 END) as alertes_critiques,
+    COUNT(CASE WHEN niveau_alerte = 'FAIBLE' THEN 1 END) as alertes_faibles,
+    COUNT(CASE WHEN niveau_alerte = 'NORMAL' THEN 1 END) as stocks_normaux,
+    COUNT(CASE WHEN niveau_alerte = 'EXCESSIF' THEN 1 END) as stocks_excessifs,
+    SUM(quantite_stock) as quantite_totale,
+    SUM(valeur_stock_ttc) as valeur_totale_ttc,
+    SUM(marge_totale) as marge_totale,
+    SUM(ventes_30_jours) as ventes_totales_30_jours
+FROM vue_stocks_complets;
+
+-- 6. VUE POUR LES STATISTIQUES PAR MAGASIN
+-- =====================================================
+CREATE VIEW vue_statistiques_magasin AS
+SELECT 
+    nom_magasin,
+    COUNT(*) as nombre_articles,
+    COUNT(CASE WHEN niveau_alerte = 'CRITIQUE' THEN 1 END) as alertes_critiques,
+    COUNT(CASE WHEN niveau_alerte = 'FAIBLE' THEN 1 END) as alertes_faibles,
+    COUNT(CASE WHEN niveau_alerte = 'NORMAL' THEN 1 END) as stocks_normaux,
+    SUM(quantite_stock) as quantite_totale,
+    SUM(valeur_stock_ttc) as valeur_totale_ttc,
+    SUM(marge_totale) as marge_totale,
+    SUM(ventes_30_jours) as ventes_totales_30_jours
+FROM vue_stocks_complets
+GROUP BY nom_magasin
+ORDER BY nom_magasin;
+
+-- 7. VUE POUR LES TOP ARTICLES PAR VENTES
+-- =====================================================
+CREATE VIEW vue_top_ventes_30_jours AS
+SELECT 
+    libelle_article,
+    code_barres,
+    SUM(ventes_30_jours) as total_ventes,
+    SUM(valeur_stock_ttc) as valeur_stock,
+    AVG(ventes_30_jours) as moyenne_ventes,
+    COUNT(DISTINCT nom_magasin) as nombre_magasins
+FROM vue_stocks_complets
+WHERE ventes_30_jours > 0
+GROUP BY libelle_article, code_barres
+ORDER BY total_ventes DESC
+LIMIT 20;
+
+-- =====================================================
+-- FIN DES CORRECTIONS PROFESSIONNELLES SIMPLIFIÉES
+-- =====================================================

@@ -1,0 +1,99 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+
+import healthRoutes from './routes/health.routes';
+import authRoutes from './routes/authRoutes';
+import articlesRoutes from './routes/articles.routes';
+import ticketsRoutes from './routes/tickets.routes';
+import facturesRoutes from './routes/factures.routes';
+import famillesRoutes from './routes/familles.routes';
+import fournisseursRoutes from './routes/fournisseursRoutes';
+import commandesRoutes from './routes/commandesRoutes';
+import rapportsZRoutes from './routes/rapportsZRoutes';
+import debugRoutes from './routes/debugRoutes';
+import tvaRoutes from './routes/tvaRoutes';
+import magasinRoutes from './routes/magasinRoutes';
+import emailRoutes from './routes/email.routes';
+import photosRoutes from './routes/photos.routes';
+import stockMagasinRoutes from './routes/stockMagasinRoutes';
+import mouvementsStockRoutes from './routes/mouvementsStockRoutes';
+
+import { DatabaseService } from './services/databaseService';
+
+const app = express();
+
+app.use(helmet());
+
+app.use(cors({
+  origin: [
+    'http://localhost:3001',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:8080'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT','PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  preflightContinue: false,
+  optionsSuccessStatus: 200
+}));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Routes API
+app.use('/api/health', healthRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/tva', tvaRoutes);
+app.use('/api/magasins', magasinRoutes);
+app.use('/api/send-email', emailRoutes);
+app.use('/api/photos', photosRoutes);
+app.use('/api/debug', debugRoutes);
+
+// Articles
+app.use('/api/articles', articlesRoutes);
+
+// Stock : on garde uniquement cette route
+app.use('/api/stock-magasin', stockMagasinRoutes);
+
+// Optionnel : garde cette route seulement si tu l’utilises vraiment
+app.use('/api/mouvements-stock', mouvementsStockRoutes);
+
+// Autres modules
+app.use('/api/tickets', ticketsRoutes);
+app.use('/api/factures', facturesRoutes);
+app.use('/api/familles', famillesRoutes);
+app.use('/api/fournisseurs', fournisseursRoutes);
+app.use('/api/commandes', commandesRoutes);
+app.use('/api/rapports-z', rapportsZRoutes);
+
+console.log('✅ Routes API enregistrées');
+
+// Initialiser la connexion au démarrage
+DatabaseService.initializeConnection().then((connected) => {
+  if (connected) {
+    console.log('✅ MEGA-Central Backend prêt !');
+  } else {
+    console.log('❌ MEGA-Central Backend non prêt - vérifiez la connexion MySQL');
+  }
+});
+
+// Error handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({
+    status: 'error',
+    message: 'Internal server error'
+  });
+});
+
+// 404 handler
+app.use('*', (req: express.Request, res: express.Response) => {
+  res.status(404).json({
+    status: 'error',
+    message: 'Route not found'
+  });
+});
+
+export default app;

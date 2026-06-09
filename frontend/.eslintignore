@@ -1,0 +1,7 @@
+# Fichiers à ignorer par ESLint
+src/pages/ParametresFinal.tsx
+src/pages/*old*.tsx
+src/pages/*Final*.tsx
+build/
+node_modules/
+dist/
