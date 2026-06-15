@@ -40,7 +40,6 @@ import {
   Cancel,
   Add,
   Inventory,
-  PhotoCamera,
   Image,
   CloudUpload,
 } from '@mui/icons-material';
@@ -142,6 +141,19 @@ const Articles: React.FC = () => {
   const [selectedPhotoArticle, setSelectedPhotoArticle] = useState<Article | null>(null);
 
   const isAdmin = user?.role === 'admin';
+
+  const toNumber = (value: string | number | null | undefined) => {
+    return Number(String(value ?? '0').replace(',', '.')) || 0;
+  };
+
+  const selectedTvaRate = tvaRates.find((tva) => String(tva.id) === form.TVA_CLEUNIK);
+  const tauxTVA = selectedTvaRate?.taux || 0;
+
+  const prixVenteHT = toNumber(form.Prix_Vente_HT);
+  const prixAchatHT = toNumber(form.Prix_Achat_HT);
+  const prixVenteTTC = prixVenteHT * (1 + tauxTVA / 100);
+
+  const venteAPerte = prixVenteHT > 0 && prixAchatHT > 0 && prixVenteHT < prixAchatHT;
 
   const formatPrice = (price: number | null | string | undefined) => {
     const numPrice = parseFloat(price?.toString() || '0');
@@ -335,30 +347,28 @@ const Articles: React.FC = () => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
- const handlePhotoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-  const file = event.target.files?.[0];
+  const handlePhotoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
 
-  if (!file) return;
+    if (!file) return;
 
-  const reader = new FileReader();
+    const reader = new FileReader();
 
-  reader.onload = () => {
-    const result = String(reader.result || '');
-    const base64Only = result.includes(',') ? result.split(',')[1] : result;
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const base64Only = result.includes(',') ? result.split(',')[1] : result;
 
-    setForm((prev) => ({
-      ...prev,
-      Photo_Name: file.name,
-      Photo_Base64: base64Only,
-    }));
+      setForm((prev) => ({
+        ...prev,
+        Photo_Name: file.name,
+        Photo_Base64: base64Only,
+      }));
+    };
 
-    console.log('Nouvelle photo sélectionnée:', file.name);
+    reader.readAsDataURL(file);
+    event.target.value = '';
   };
 
-  reader.readAsDataURL(file);
-
-  event.target.value = '';
-};
   const buildPayload = () => {
     const fournisseurId = form.FOUcleunik ? Number(form.FOUcleunik) : 0;
     const familleId = form.FAMILLE_CLEUNIK ? Number(form.FAMILLE_CLEUNIK) : 0;
@@ -367,37 +377,19 @@ const Articles: React.FC = () => {
     return {
       LIBELLE: form.LIBELLE.trim(),
       Code_Barres: form.Code_Barres.trim(),
-      Prix_Vente_HT: parseFloat(form.Prix_Vente_HT.replace(',', '.')) || 0,
-      Prix_Achat_HT: parseFloat(form.Prix_Achat_HT.replace(',', '.')) || 0,
-      Prix_Achat_TTC: parseFloat(form.Prix_Achat_TTC.replace(',', '.')) || 0,
+      Prix_Vente_HT: toNumber(form.Prix_Vente_HT),
+      Prix_Vente_TTC: Number(prixVenteTTC.toFixed(2)),
+      Prix_Achat_HT: toNumber(form.Prix_Achat_HT),
+      Prix_Achat_TTC: toNumber(form.Prix_Achat_TTC),
       TVA_CLEUNIK: tvaId,
-      Taux_TVA: tvaId,
+      Taux_TVA: tauxTVA,
       F1_Cleunik: familleId,
       F2_CLEUNIK: familleId,
       FRN_CLEUNIK: fournisseurId,
       FOUcleunik: fournisseurId,
-
-      // Champs photo en base64
       Photo_Name: form.Photo_Name || null,
       Photo_Base64: form.Photo_Base64 || null,
     };
-  };
-
-  const savePhotoIfPossible = async (articleId: number) => {
-    if (!form.Photo_Base64) return;
-
-    try {
-    const savePhotoIfPossible = async (articleId: number) => {
-  if (!form.Photo_Base64 || !form.Photo_Name) return;
-
-  await api.post(`/photos/${articleId}`, {
-    Photo_Name: form.Photo_Name,
-    Photo_Base64: form.Photo_Base64,
-  });
-};
-    } catch (err) {
-      console.warn('Photo non sauvegardée via /photos. Elle est conservée côté formulaire uniquement.', err);
-    }
   };
 
   const handleCreateClick = () => {
@@ -410,48 +402,36 @@ const Articles: React.FC = () => {
     setCreateDialogOpen(true);
   };
 
-const handleCreateSubmit = async () => {
-  if (!form.LIBELLE.trim()) {
-    setError('Le libellé est obligatoire');
-    return;
-  }
-
-  try {
-    setSaving(true);
-    setError(null);
-
-    const response = await api.post('/articles', buildPayload());
-
-    const createdId =
-      response.data?.data?.ARCLEUNIK ||
-      response.data?.ARCLEUNIK;
-
-    console.log('Article créé ID:', createdId);
-    console.log('Photo dans formulaire:', {
-      Photo_Name: form.Photo_Name,
-      hasPhoto: !!form.Photo_Base64,
-    });
-
-    if (createdId && form.Photo_Name && form.Photo_Base64) {
-      await api.post(`/photos/${createdId}`, {
-        Photo_Name: form.Photo_Name,
-        Photo_Base64: form.Photo_Base64,
-      });
-
-      console.log('Photo sauvegardée pour article:', createdId);
-    } else {
-      console.log('Aucune photo envoyée');
+  const handleCreateSubmit = async () => {
+    if (!form.LIBELLE.trim()) {
+      setError('Le libellé est obligatoire');
+      return;
     }
 
-    setCreateDialogOpen(false);
-    resetForm();
-    await fetchArticles();
-  } catch (err: any) {
-    setError(err.response?.data?.message || "Erreur lors de la création de l'article");
-  } finally {
-    setSaving(false);
-  }
-};
+    try {
+      setSaving(true);
+      setError(null);
+
+      const response = await api.post('/articles', buildPayload());
+
+      const createdId = response.data?.data?.ARCLEUNIK || response.data?.ARCLEUNIK;
+
+      if (createdId && form.Photo_Name && form.Photo_Base64) {
+        await api.post(`/photos/${createdId}`, {
+          Photo_Name: form.Photo_Name,
+          Photo_Base64: form.Photo_Base64,
+        });
+      }
+
+      setCreateDialogOpen(false);
+      resetForm();
+      await fetchArticles();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Erreur lors de la création de l'article");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleEditClick = (article: Article) => {
     if (!isAdmin) {
@@ -466,7 +446,7 @@ const handleCreateSubmit = async () => {
       Prix_Vente_HT: String(article.Prix_Vente_HT ?? '0'),
       Prix_Achat_HT: String(article.Prix_Achat_HT ?? '0'),
       Prix_Achat_TTC: String(article.Prix_Achat_TTC ?? '0'),
-      TVA_CLEUNIK: String(article.TVA_CLEUNIK ?? article.Taux_TVA ?? ''),
+      TVA_CLEUNIK: String(article.TVA_CLEUNIK ?? ''),
       FAMILLE_CLEUNIK: String(article.F2_CLEUNIK ?? article.F1_Cleunik ?? ''),
       FOUcleunik: String(article.FOUcleunik ?? article.FRN_CLEUNIK ?? ''),
       Photo_Name: article.Photo_Name || '',
@@ -477,37 +457,35 @@ const handleCreateSubmit = async () => {
   };
 
   const handleEditSubmit = async () => {
-  if (!editingId) return;
+    if (!editingId) return;
 
-  if (!form.LIBELLE.trim()) {
-    setError('Le libellé est obligatoire');
-    return;
-  }
-
-  try {
-    setSaving(true);
-    setError(null);
-
-    await api.put(`/articles/${editingId}`, buildPayload());
-
-    if (form.Photo_Base64 && form.Photo_Name) {
-      await api.post(`/photos/${editingId}`, {
-        Photo_Name: form.Photo_Name,
-        Photo_Base64: form.Photo_Base64,
-      });
-
-      console.log('Photo modifiée pour article:', editingId);
+    if (!form.LIBELLE.trim()) {
+      setError('Le libellé est obligatoire');
+      return;
     }
 
-    setEditDialogOpen(false);
-    resetForm();
-    await fetchArticles();
-  } catch (err: any) {
-    setError(err.response?.data?.message || "Erreur lors de la modification de l'article");
-  } finally {
-    setSaving(false);
-  }
-};
+    try {
+      setSaving(true);
+      setError(null);
+
+      await api.put(`/articles/${editingId}`, buildPayload());
+
+      if (form.Photo_Base64 && form.Photo_Name) {
+        await api.post(`/photos/${editingId}`, {
+          Photo_Name: form.Photo_Name,
+          Photo_Base64: form.Photo_Base64,
+        });
+      }
+
+      setEditDialogOpen(false);
+      resetForm();
+      await fetchArticles();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Erreur lors de la modification de l'article");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleDeleteClick = (article: Article) => {
     if (!isAdmin) {
@@ -557,7 +535,7 @@ const handleCreateSubmit = async () => {
         setSelectedPhotoArticle(article);
         setPhotoDialogOpen(true);
       }
-    } catch (err) {
+    } catch {
       setSelectedPhotoArticle(article);
       setPhotoDialogOpen(true);
     }
@@ -599,7 +577,7 @@ const handleCreateSubmit = async () => {
         </Button>
 
         {form.Photo_Name ? (
-          <Chip color="success" label={`Photo sélectionnée pour modification   : ${form.Photo_Name}`} />
+          <Chip color="success" label={`Photo sélectionnée : ${form.Photo_Name}`} />
         ) : (
           <Typography variant="body2" color="text.secondary">
             Aucune photo sélectionnée
@@ -647,59 +625,52 @@ const handleCreateSubmit = async () => {
 
       <Grid item xs={12} md={4}>
         <TextField
-  fullWidth
-  label="Prix vente HT"
-  type="number"
-  value={form.Prix_Vente_HT}
-  onChange={(e) => handleInputChange('Prix_Vente_HT', e.target.value)}
-  InputProps={{
-    startAdornment: (
-      <InputAdornment position="start">€</InputAdornment>
-    ),
-    inputProps: {
-      min: 0,
-      step: 0.01,
-    },
-  }}
-/>
+          fullWidth
+          label="Prix vente HT"
+          type="number"
+          value={form.Prix_Vente_HT}
+          onChange={(e) => handleInputChange('Prix_Vente_HT', e.target.value)}
+          error={venteAPerte}
+          helperText={venteAPerte ? "Prix inférieur au prix d'achat" : ''}
+          InputProps={{
+            startAdornment: <InputAdornment position="start">€</InputAdornment>,
+            inputProps: {
+              min: 0,
+              step: 0.01,
+            },
+          }}
+        />
       </Grid>
 
       <Grid item xs={12} md={4}>
         <TextField
-  fullWidth
-  label="Prix achat HT"
-  type="number"
-  value={form.Prix_Achat_HT}
-  onChange={(e) => handleInputChange('Prix_Achat_HT', e.target.value)}
-  InputProps={{
-    startAdornment: (
-      <InputAdornment position="start">€</InputAdornment>
-    ),
-    inputProps: {
-      min: 0,
-      step: 0.01,
-    },
-  }}
-/>
+          fullWidth
+          label="Prix achat HT"
+          type="number"
+          value={form.Prix_Achat_HT}
+          onChange={(e) => handleInputChange('Prix_Achat_HT', e.target.value)}
+          InputProps={{
+            startAdornment: <InputAdornment position="start">€</InputAdornment>,
+            inputProps: {
+              min: 0,
+              step: 0.01,
+            },
+          }}
+        />
       </Grid>
 
       <Grid item xs={12} md={4}>
         <TextField
-  fullWidth
-  label="Prix achat TTC"
-  type="number"
-  value={form.Prix_Achat_TTC}
-  onChange={(e) => handleInputChange('Prix_Achat_TTC', e.target.value)}
-  InputProps={{
-    startAdornment: (
-      <InputAdornment position="start">€</InputAdornment>
-    ),
-    inputProps: {
-      min: 0,
-      step: 0.01,
-    },
-  }}
-/>
+          fullWidth
+          label="Prix vente TTC"
+          type="number"
+          value={prixVenteTTC.toFixed(2)}
+          InputProps={{
+            readOnly: true,
+            startAdornment: <InputAdornment position="start">€</InputAdornment>,
+          }}
+          helperText="Calculé automatiquement selon la TVA"
+        />
       </Grid>
 
       <Grid item xs={12} md={4}>
@@ -755,6 +726,14 @@ const handleCreateSubmit = async () => {
           </Select>
         </FormControl>
       </Grid>
+
+      {venteAPerte && (
+        <Grid item xs={12}>
+          <Alert severity="warning">
+            Prix de vente inférieur au prix d'achat. Cet article sera vendu à perte.
+          </Alert>
+        </Grid>
+      )}
 
       {renderPhotoUploader()}
     </Grid>
@@ -846,7 +825,6 @@ const handleCreateSubmit = async () => {
                   <TableCell>Libellé</TableCell>
                   <TableCell>Prix vente HT</TableCell>
                   <TableCell>Prix achat HT</TableCell>
-                  <TableCell>Prix achat TTC</TableCell>
                   <TableCell>Catégorie / Famille</TableCell>
                   <TableCell>Fournisseur</TableCell>
                   <TableCell>Photo</TableCell>
@@ -863,33 +841,25 @@ const handleCreateSubmit = async () => {
                       <TableCell>{article.LIBELLE || '-'}</TableCell>
                       <TableCell>{formatPrice(article.Prix_Vente_HT)}</TableCell>
                       <TableCell>{formatPrice(article.Prix_Achat_HT)}</TableCell>
-                      <TableCell>{formatPrice(article.Prix_Achat_TTC)}</TableCell>
                       <TableCell>{getFamilleName(article)}</TableCell>
                       <TableCell>{getFournisseurName(article)}</TableCell>
 
                       <TableCell>
-                        <TableCell>
-  {article.Photo_Base64 ? (
-    <Tooltip title="Voir la photo de l'article">
-      <Button
-        size="small"
-        color="success"
-        variant="contained"
-        startIcon={<Image />}
-        onClick={() => handleVoirPhoto(article)}
-      >
-        Voir photo
-      </Button>
-    </Tooltip>
-  ) : (
-    <Chip
-      label="Aucune photo"
-      color="error"
-      size="small"
-      variant="outlined"
-    />
-  )}
-</TableCell>
+                        {article.Photo_Base64 ? (
+                          <Tooltip title="Voir la photo de l'article">
+                            <Button
+                              size="small"
+                              color="success"
+                              variant="contained"
+                              startIcon={<Image />}
+                              onClick={() => handleVoirPhoto(article)}
+                            >
+                              Voir photo
+                            </Button>
+                          </Tooltip>
+                        ) : (
+                          <Chip label="Aucune photo" color="error" size="small" variant="outlined" />
+                        )}
                       </TableCell>
 
                       <TableCell>
@@ -962,9 +932,7 @@ const handleCreateSubmit = async () => {
       </Dialog>
 
       <Dialog open={photoDialogOpen} onClose={() => setPhotoDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          Photo de l'article
-        </DialogTitle>
+        <DialogTitle>Photo de l'article</DialogTitle>
 
         <DialogContent dividers>
           <Typography variant="h6" sx={{ mb: 2 }}>
@@ -986,9 +954,7 @@ const handleCreateSubmit = async () => {
               }}
             />
           ) : (
-            <Alert severity="info">
-              Aucune photo disponible pour cet article.
-            </Alert>
+            <Alert severity="info">Aucune photo disponible pour cet article.</Alert>
           )}
         </DialogContent>
 

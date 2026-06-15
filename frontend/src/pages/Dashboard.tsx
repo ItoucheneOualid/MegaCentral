@@ -83,10 +83,18 @@ const Dashboard: React.FC = () => {
   const isDarkMode = theme.palette.mode === 'dark';
 
   const formatCurrency = (amount: string | number | null | undefined) => {
-    if (!amount || amount === '') return '0.00 €';
-    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return isNaN(numAmount) ? '0.00 €' : `${numAmount.toFixed(2)} €`;
-  };
+  const numAmount =
+    typeof amount === 'string'
+      ? Number(amount.replace(',', '.'))
+      : Number(amount || 0);
+
+  return new Intl.NumberFormat('fr-BE', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(isNaN(numAmount) ? 0 : numAmount);
+};
 
   // Fonctions de filtrage
   const getDateRange = (period: string) => {
@@ -629,7 +637,7 @@ const Dashboard: React.FC = () => {
                   Meilleur magasin
                 </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 700, color: isDarkMode ? '#f8fafc' : '#0f172a' }}>
-                  {topStore?.nomMagasin || topStore?.nom_magasin || 'N/A'}
+                  {topStore?.nomMagasin || topStore?.nomMagasin || 'N/A'}
                 </Typography>
               </Box>
               <Box>
@@ -1046,7 +1054,7 @@ const Dashboard: React.FC = () => {
                       letterSpacing: '0.5px'
                     }}
                   >
-                    Total Clients
+                    CLIENTS IDENTIFIÉS
                   </Typography>
                   <Typography 
                     variant="h2" 
@@ -1617,7 +1625,7 @@ const Dashboard: React.FC = () => {
                       }}>
                         <People sx={{ fontSize: 20, color: isDarkMode ? '#8b5cf6' : '#7c3aed' }} />
                       </Box>
-                      Clients
+                      Clients IDENTIFIÉS
                     </Box>
                   </TableCell>
                   <TableCell sx={{ 

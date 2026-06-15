@@ -115,6 +115,11 @@ const Commandes: React.FC = () => {
   const [quantite, setQuantite] = useState(1);
   const [lignes, setLignes] = useState<LigneCommande[]>([]);
 
+  const livraisonAvantCommande =
+    !!form.dateLivraisonPrevue &&
+    !!form.dateCommande &&
+    form.dateLivraisonPrevue < form.dateCommande;
+
   useEffect(() => {
     fetchCommandes();
     fetchFournisseurs();
@@ -311,6 +316,12 @@ const Commandes: React.FC = () => {
       throw new Error('Veuillez ajouter au moins un article à la commande');
     }
 
+    if (livraisonAvantCommande) {
+      throw new Error(
+        'La date de livraison prévue ne peut pas être antérieure à la date de commande.'
+      );
+    }
+
     return {
       idFournisseur: fournisseur.id,
       fournisseurCode: fournisseur.code,
@@ -333,6 +344,13 @@ const Commandes: React.FC = () => {
     try {
       setSaving(true);
       setError('');
+
+      if (livraisonAvantCommande) {
+        setError(
+          'La date de livraison prévue ne peut pas être antérieure à la date de commande.'
+        );
+        return;
+      }
 
       const payload = buildPayload();
 
@@ -636,7 +654,18 @@ const Commandes: React.FC = () => {
                 type="date"
                 label="Date commande"
                 value={form.dateCommande}
-                onChange={(e) => setForm({ ...form, dateCommande: e.target.value })}
+                onChange={(e) => {
+                  const newDateCommande = e.target.value;
+
+                  setForm((prev) => ({
+                    ...prev,
+                    dateCommande: newDateCommande,
+                    dateLivraisonPrevue:
+                      prev.dateLivraisonPrevue && prev.dateLivraisonPrevue < newDateCommande
+                        ? ''
+                        : prev.dateLivraisonPrevue,
+                  }));
+                }}
                 InputLabelProps={{ shrink: true }}
               />
             </Grid>
@@ -649,8 +678,25 @@ const Commandes: React.FC = () => {
                 value={form.dateLivraisonPrevue}
                 onChange={(e) => setForm({ ...form, dateLivraisonPrevue: e.target.value })}
                 InputLabelProps={{ shrink: true }}
+                inputProps={{
+                  min: form.dateCommande,
+                }}
+                error={livraisonAvantCommande}
+                helperText={
+                  livraisonAvantCommande
+                    ? 'La date de livraison doit être supérieure ou égale à la date de commande'
+                    : ''
+                }
               />
             </Grid>
+
+            {livraisonAvantCommande && (
+              <Grid item xs={12}>
+                <Alert severity="warning">
+                  La date de livraison prévue ne peut pas être antérieure à la date de commande.
+                </Alert>
+              </Grid>
+            )}
 
             <Grid item xs={12} md={4}>
               <FormControl fullWidth>
@@ -703,22 +749,22 @@ const Commandes: React.FC = () => {
 
             <Grid item xs={12} md={3}>
               <TextField
-  fullWidth
-  type="number"
-  label="Quantité"
-  value={quantite}
-  onChange={(e) => {
-    const value = Number(e.target.value);
+                fullWidth
+                type="number"
+                label="Quantité"
+                value={quantite}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
 
-    if (value >= 0) {
-      setQuantite(value);
-    }
-  }}
-  inputProps={{
-    min: 0,
-    step: 1,
-  }}
-/>
+                  if (value >= 0) {
+                    setQuantite(value);
+                  }
+                }}
+                inputProps={{
+                  min: 0,
+                  step: 1,
+                }}
+              />
             </Grid>
 
             <Grid item xs={12} md={2}>
@@ -781,7 +827,11 @@ const Commandes: React.FC = () => {
 
         <DialogActions>
           <Button onClick={() => setOpenForm(false)}>Annuler</Button>
-          <Button variant="contained" onClick={handleSaveCommande} disabled={saving}>
+          <Button
+            variant="contained"
+            onClick={handleSaveCommande}
+            disabled={saving || livraisonAvantCommande}
+          >
             {editingCommandeId ? 'Modifier la commande' : 'Enregistrer la commande'}
           </Button>
         </DialogActions>

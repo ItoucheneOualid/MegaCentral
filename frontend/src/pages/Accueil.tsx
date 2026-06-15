@@ -881,7 +881,7 @@ const Accueil: React.FC = () => {
                     </Typography>
 
                     <Typography color="text.secondary" lineHeight={1.75}>
-                      {feature.description}
+                      
                     </Typography>
                   </CardContent>
                 </Card>
