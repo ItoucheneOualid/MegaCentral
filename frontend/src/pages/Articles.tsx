@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import {
+  alpha,
   Box,
   Card,
   CardContent,
@@ -30,6 +31,8 @@ import {
   MenuItem,
   IconButton,
   Tooltip,
+  Stack,
+  useTheme,
 } from '@mui/material';
 
 import {
@@ -114,6 +117,8 @@ const emptyForm: ArticleForm = {
 const Articles: React.FC = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
   const { alert, showPermissionAlert, closeAlert } = usePermissionAlert();
 
   const [articles, setArticles] = useState<Article[]>([]);
@@ -155,9 +160,13 @@ const Articles: React.FC = () => {
 
   const venteAPerte = prixVenteHT > 0 && prixAchatHT > 0 && prixVenteHT < prixAchatHT;
 
+  const articlesAvecPhoto = articles.filter((article) => article.Photo_Base64).length;
+  const articlesSansPhoto = articles.length - articlesAvecPhoto;
+  const nombreFournisseurs = fournisseurs.length;
+
   const formatPrice = (price: number | null | string | undefined) => {
     const numPrice = parseFloat(price?.toString() || '0');
-    return new Intl.NumberFormat('fr-FR', {
+    return new Intl.NumberFormat('fr-BE', {
       style: 'currency',
       currency: 'EUR',
     }).format(numPrice);
@@ -166,11 +175,9 @@ const Articles: React.FC = () => {
   const normalizeBase64Image = (base64?: string | null) => {
     if (!base64) return '';
     if (base64.startsWith('data:image')) return base64;
-
     if (base64.startsWith('/9j/')) return `data:image/jpeg;base64,${base64}`;
     if (base64.startsWith('iVBOR')) return `data:image/png;base64,${base64}`;
     if (base64.startsWith('Qk')) return `data:image/bmp;base64,${base64}`;
-
     return `data:image/jpeg;base64,${base64}`;
   };
 
@@ -262,7 +269,7 @@ const Articles: React.FC = () => {
               { id: 5, nom: 'Famille 5' },
             ]
       );
-    } catch (err) {
+    } catch {
       setFamilles([
         { id: 1, nom: 'Famille 1' },
         { id: 2, nom: 'Famille 2' },
@@ -277,7 +284,7 @@ const Articles: React.FC = () => {
     try {
       const response = await api.get('/tva');
       setTvaRates(adaptTvaRates(response.data.data || response.data || []));
-    } catch (err) {
+    } catch {
       setTvaRates([
         { id: 1, taux: 0, description: '0%' },
         { id: 2, taux: 6, description: '6%' },
@@ -291,7 +298,7 @@ const Articles: React.FC = () => {
     try {
       const response = await api.get('/fournisseurs');
       setFournisseurs(adaptFournisseurs(response.data.data || response.data || []));
-    } catch (err) {
+    } catch {
       setFournisseurs([]);
     }
   };
@@ -318,11 +325,13 @@ const Articles: React.FC = () => {
 
   const filteredArticles = articles.filter((article) => {
     const search = searchTerm.toLowerCase();
+
     const matchesSearch =
       article.LIBELLE?.toLowerCase().includes(search) ||
       article.Code_Barres?.toLowerCase().includes(search);
 
     const fournisseurId = article.FRN_CLEUNIK ?? article.FOUcleunik;
+
     const matchesFournisseur =
       selectedFournisseurFilter === '' || String(fournisseurId || '') === selectedFournisseurFilter;
 
@@ -331,6 +340,7 @@ const Articles: React.FC = () => {
 
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -349,7 +359,6 @@ const Articles: React.FC = () => {
 
   const handlePhotoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-
     if (!file) return;
 
     const reader = new FileReader();
@@ -413,7 +422,6 @@ const Articles: React.FC = () => {
       setError(null);
 
       const response = await api.post('/articles', buildPayload());
-
       const createdId = response.data?.data?.ARCLEUNIK || response.data?.ARCLEUNIK;
 
       if (createdId && form.Photo_Name && form.Photo_Base64) {
@@ -440,6 +448,7 @@ const Articles: React.FC = () => {
     }
 
     setEditingId(article.ARCLEUNIK);
+
     setForm({
       LIBELLE: article.LIBELLE || '',
       Code_Barres: article.Code_Barres || '',
@@ -530,6 +539,7 @@ const Articles: React.FC = () => {
           Photo_Name: photoData.Photo_Name || photoData.photoName || article.LIBELLE || 'Photo article',
           Photo_Base64: photoData.Photo_Base64 || photoData.photoBase64 || photoData.base64,
         });
+
         setPhotoDialogOpen(true);
       } catch {
         setSelectedPhotoArticle(article);
@@ -546,6 +556,7 @@ const Articles: React.FC = () => {
 
     const fournisseurId = article.FOUcleunik ?? article.FRN_CLEUNIK;
     const fournisseur = fournisseurs.find((f) => f.id === String(fournisseurId));
+
     return fournisseur?.nom || '-';
   };
 
@@ -555,29 +566,58 @@ const Articles: React.FC = () => {
 
     const familleId = article.F2_CLEUNIK ?? article.F1_Cleunik;
     const famille = familles.find((f) => f.id === Number(familleId));
+
     return famille?.nom || '-';
   };
+
+  const statCards = [
+    {
+      label: 'Articles',
+      value: articles.length,
+      color: '#2563eb',
+      description: 'Références',
+    },
+    {
+      label: 'Avec photo',
+      value: articlesAvecPhoto,
+      color: '#16a34a',
+      description: 'Illustrés',
+    },
+    {
+      label: 'Sans photo',
+      value: articlesSansPhoto,
+      color: '#f97316',
+      description: 'À compléter',
+    },
+    {
+      label: 'Fournisseurs',
+      value: nombreFournisseurs,
+      color: '#7c3aed',
+      description: 'Partenaires',
+    },
+  ];
 
   const renderPhotoUploader = () => (
     <Grid item xs={12}>
       <Box
         sx={{
-          border: '1px dashed #1976d2',
-          borderRadius: 2,
-          p: 2,
+          border: `1px dashed ${alpha('#2563eb', 0.55)}`,
+          borderRadius: 2.5,
+          p: 1.5,
           display: 'flex',
           alignItems: 'center',
-          gap: 2,
+          gap: 1.5,
           flexWrap: 'wrap',
+          bgcolor: isDarkMode ? alpha('#2563eb', 0.08) : alpha('#2563eb', 0.04),
         }}
       >
-        <Button variant="outlined" component="label" startIcon={<CloudUpload />}>
+        <Button variant="outlined" component="label" size="small" startIcon={<CloudUpload />} sx={{ borderRadius: 2.5 }}>
           {editingId ? 'Modifier la photo' : 'Ajouter une photo'}
           <input type="file" hidden accept="image/*" onChange={handlePhotoFileChange} />
         </Button>
 
         {form.Photo_Name ? (
-          <Chip color="success" label={`Photo sélectionnée : ${form.Photo_Name}`} />
+          <Chip size="small" color="success" label={`Photo : ${form.Photo_Name}`} />
         ) : (
           <Typography variant="body2" color="text.secondary">
             Aucune photo sélectionnée
@@ -590,11 +630,11 @@ const Articles: React.FC = () => {
             src={normalizeBase64Image(form.Photo_Base64)}
             alt="Aperçu article"
             sx={{
-              width: 90,
-              height: 90,
+              width: 72,
+              height: 72,
               objectFit: 'cover',
               borderRadius: 2,
-              border: '1px solid #ddd',
+              border: `1px solid ${alpha('#2563eb', 0.25)}`,
             }}
           />
         )}
@@ -603,11 +643,12 @@ const Articles: React.FC = () => {
   );
 
   const renderArticleForm = () => (
-    <Grid container spacing={2} sx={{ mt: 1 }}>
+    <Grid container spacing={1.7} sx={{ mt: 0.5 }}>
       <Grid item xs={12} md={6}>
         <TextField
           fullWidth
           required
+          size="small"
           label="Libellé"
           value={form.LIBELLE}
           onChange={(e) => handleInputChange('LIBELLE', e.target.value)}
@@ -617,6 +658,7 @@ const Articles: React.FC = () => {
       <Grid item xs={12} md={6}>
         <TextField
           fullWidth
+          size="small"
           label="Code-barres"
           value={form.Code_Barres}
           onChange={(e) => handleInputChange('Code_Barres', e.target.value)}
@@ -626,6 +668,7 @@ const Articles: React.FC = () => {
       <Grid item xs={12} md={4}>
         <TextField
           fullWidth
+          size="small"
           label="Prix vente HT"
           type="number"
           value={form.Prix_Vente_HT}
@@ -634,10 +677,7 @@ const Articles: React.FC = () => {
           helperText={venteAPerte ? "Prix inférieur au prix d'achat" : ''}
           InputProps={{
             startAdornment: <InputAdornment position="start">€</InputAdornment>,
-            inputProps: {
-              min: 0,
-              step: 0.01,
-            },
+            inputProps: { min: 0, step: 0.01 },
           }}
         />
       </Grid>
@@ -645,16 +685,14 @@ const Articles: React.FC = () => {
       <Grid item xs={12} md={4}>
         <TextField
           fullWidth
+          size="small"
           label="Prix achat HT"
           type="number"
           value={form.Prix_Achat_HT}
           onChange={(e) => handleInputChange('Prix_Achat_HT', e.target.value)}
           InputProps={{
             startAdornment: <InputAdornment position="start">€</InputAdornment>,
-            inputProps: {
-              min: 0,
-              step: 0.01,
-            },
+            inputProps: { min: 0, step: 0.01 },
           }}
         />
       </Grid>
@@ -662,6 +700,7 @@ const Articles: React.FC = () => {
       <Grid item xs={12} md={4}>
         <TextField
           fullWidth
+          size="small"
           label="Prix vente TTC"
           type="number"
           value={prixVenteTTC.toFixed(2)}
@@ -669,12 +708,12 @@ const Articles: React.FC = () => {
             readOnly: true,
             startAdornment: <InputAdornment position="start">€</InputAdornment>,
           }}
-          helperText="Calculé automatiquement selon la TVA"
+          helperText="Calculé selon la TVA"
         />
       </Grid>
 
       <Grid item xs={12} md={4}>
-        <FormControl fullWidth>
+        <FormControl fullWidth size="small">
           <InputLabel>TVA</InputLabel>
           <Select
             value={form.TVA_CLEUNIK}
@@ -692,7 +731,7 @@ const Articles: React.FC = () => {
       </Grid>
 
       <Grid item xs={12} md={4}>
-        <FormControl fullWidth>
+        <FormControl fullWidth size="small">
           <InputLabel>Catégorie / Famille</InputLabel>
           <Select
             value={form.FAMILLE_CLEUNIK}
@@ -710,7 +749,7 @@ const Articles: React.FC = () => {
       </Grid>
 
       <Grid item xs={12} md={4}>
-        <FormControl fullWidth>
+        <FormControl fullWidth size="small">
           <InputLabel>Fournisseur</InputLabel>
           <Select
             value={form.FOUcleunik}
@@ -729,7 +768,7 @@ const Articles: React.FC = () => {
 
       {venteAPerte && (
         <Grid item xs={12}>
-          <Alert severity="warning">
+          <Alert severity="warning" sx={{ borderRadius: 2.5 }}>
             Prix de vente inférieur au prix d'achat. Cet article sera vendu à perte.
           </Alert>
         </Grid>
@@ -741,48 +780,211 @@ const Articles: React.FC = () => {
 
   const selectedPhotoSrc = normalizeBase64Image(selectedPhotoArticle?.Photo_Base64);
 
+  const paginationTop = (
+    <TablePagination
+      component="div"
+      count={filteredArticles.length}
+      rowsPerPage={rowsPerPage}
+      page={page}
+      onPageChange={handleChangePage}
+      onRowsPerPageChange={handleChangeRowsPerPage}
+      labelRowsPerPage="Lignes"
+      rowsPerPageOptions={[10, 25, 50, 100]}
+      sx={{
+        borderRadius: 2,
+        '.MuiTablePagination-toolbar': {
+          minHeight: 42,
+          px: 1,
+        },
+        '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+          fontSize: '0.8rem',
+          m: 0,
+        },
+        '.MuiTablePagination-actions button': {
+          p: 0.5,
+        },
+      }}
+    />
+  );
+
   return (
-    <Box sx={{ p: 3, backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
-      <Typography variant="h4" sx={{ mb: 3, color: '#1976d2', display: 'flex', alignItems: 'center' }}>
-        <Inventory sx={{ mr: 2 }} />
-        Articles
-      </Typography>
+    <Box
+      sx={{
+        p: { xs: 1.5, md: 2 },
+        minHeight: '100vh',
+        background: isDarkMode
+          ? 'linear-gradient(135deg, #07111f 0%, #0f172a 100%)'
+          : 'linear-gradient(135deg, #eef4ff 0%, #f8fafc 45%, #ffffff 100%)',
+      }}
+    >
+      <Box
+        sx={{
+          mb: 2,
+          p: { xs: 2, md: 2.5 },
+          borderRadius: 3.5,
+          background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #0f172a 100%)',
+          color: '#fff',
+          boxShadow: '0 16px 45px rgba(37,99,235,0.22)',
+          position: 'relative',
+          overflow: 'hidden',
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            width: 240,
+            height: 240,
+            borderRadius: '50%',
+            bgcolor: 'rgba(255,255,255,0.1)',
+            right: -70,
+            top: -100,
+            filter: 'blur(2px)',
+          },
+        }}
+      >
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          justifyContent="space-between"
+          alignItems={{ xs: 'flex-start', md: 'center' }}
+          spacing={2}
+          sx={{ position: 'relative', zIndex: 1 }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box
+              sx={{
+                width: 46,
+                height: 46,
+                borderRadius: 2.5,
+                display: 'grid',
+                placeItems: 'center',
+                bgcolor: 'rgba(255,255,255,0.16)',
+                border: '1px solid rgba(255,255,255,0.22)',
+              }}
+            >
+              <Inventory sx={{ fontSize: 27 }} />
+            </Box>
+
+            <Box>
+              <Typography variant="h5" fontWeight={950}>
+                Gestion des articles
+              </Typography>
+              <Typography sx={{ color: 'rgba(255,255,255,0.75)', fontWeight: 600, fontSize: '0.85rem' }}>
+                Catalogue produits, prix, fournisseurs et photos
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Button
+            variant="contained"
+            onClick={handleCreateClick}
+            startIcon={<Add />}
+            size="small"
+            sx={{
+              px: 2.2,
+              py: 1,
+              borderRadius: 2.5,
+              textTransform: 'none',
+              fontWeight: 900,
+              bgcolor: '#fff',
+              color: '#1d4ed8',
+              '&:hover': {
+                bgcolor: '#eff6ff',
+                transform: 'translateY(-2px)',
+              },
+            }}
+          >
+            Ajouter un article
+          </Button>
+        </Stack>
+      </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2.5 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
 
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-            <Typography variant="h6" sx={{ color: '#1976d2' }}>
-              Gestion des articles
-            </Typography>
-            <Chip label={`${articles.length} articles`} color="primary" sx={{ fontWeight: 'bold' }} />
-          </Box>
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        {statCards.map((stat) => (
+          <Grid item xs={12} sm={6} md={3} key={stat.label}>
+            <Card
+              sx={{
+                height: '100%',
+                borderRadius: 3,
+                bgcolor: isDarkMode ? '#0f172a' : '#ffffff',
+                border: `1px solid ${alpha(stat.color, 0.18)}`,
+                boxShadow: isDarkMode ? '0 12px 30px rgba(0,0,0,0.2)' : '0 12px 30px rgba(15,23,42,0.06)',
+              }}
+            >
+              <CardContent sx={{ p: 1.8, '&:last-child': { pb: 1.8 } }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Box>
+                    <Typography color="text.secondary" fontWeight={800} fontSize="0.78rem">
+                      {stat.label}
+                    </Typography>
+                    <Typography variant="h5" fontWeight={950} sx={{ color: stat.color, mt: 0.2 }}>
+                      {stat.value}
+                    </Typography>
+                    <Typography color="text.secondary" fontSize="0.78rem">
+                      {stat.description}
+                    </Typography>
+                  </Box>
 
-          <Box display="flex" gap={2} mb={3} flexWrap="wrap">
+                  <Box
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 2.5,
+                      display: 'grid',
+                      placeItems: 'center',
+                      bgcolor: alpha(stat.color, 0.12),
+                      color: stat.color,
+                    }}
+                  >
+                    <Inventory fontSize="small" />
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      <Card
+        sx={{
+          mb: 2,
+          borderRadius: 3,
+          bgcolor: isDarkMode ? '#0f172a' : '#ffffff',
+          border: `1px solid ${alpha('#2563eb', 0.12)}`,
+          boxShadow: isDarkMode ? '0 14px 38px rgba(0,0,0,0.2)' : '0 14px 38px rgba(15,23,42,0.06)',
+        }}
+      >
+        <CardContent sx={{ p: 1.8, '&:last-child': { pb: 1.8 } }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems="center">
             <TextField
-              sx={{ flex: 1, minWidth: 250 }}
-              placeholder={t.articles?.recherchePlaceholder || 'Rechercher un article...'}
+              sx={{ flex: 1, width: '100%' }}
+              size="small"
+              placeholder={t.articles?.recherchePlaceholder || 'Rechercher un article, code-barres...'}
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(0);
+              }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Search />
+                    <Search fontSize="small" />
                   </InputAdornment>
                 ),
               }}
             />
 
-            <FormControl sx={{ minWidth: 220 }}>
+            <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 220 } }}>
               <InputLabel>Fournisseur</InputLabel>
               <Select
                 value={selectedFournisseurFilter}
-                onChange={(e) => setSelectedFournisseurFilter(String(e.target.value))}
+                onChange={(e) => {
+                  setSelectedFournisseurFilter(String(e.target.value));
+                  setPage(0);
+                }}
                 label="Fournisseur"
               >
                 <MenuItem value="">Tous</MenuItem>
@@ -796,39 +998,89 @@ const Articles: React.FC = () => {
 
             <Button
               variant="outlined"
+              size="small"
               onClick={() => {
                 setSearchTerm('');
                 setSelectedFournisseurFilter('');
+                setPage(0);
+              }}
+              sx={{
+                borderRadius: 2.5,
+                px: 2,
+                height: 40,
+                minWidth: { xs: '100%', md: 'auto' },
+                textTransform: 'none',
+                fontWeight: 800,
               }}
             >
               Réinitialiser
             </Button>
-
-            <Button variant="contained" onClick={handleCreateClick} startIcon={<Add />}>
-              Ajouter un article
-            </Button>
-          </Box>
+          </Stack>
         </CardContent>
       </Card>
 
       {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
-          <CircularProgress size={60} />
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="45vh">
+          <CircularProgress size={48} />
         </Box>
       ) : (
-        <Card>
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
+        <Card
+          sx={{
+            borderRadius: 3,
+            overflow: 'hidden',
+            bgcolor: isDarkMode ? '#0f172a' : '#ffffff',
+            border: `1px solid ${alpha('#2563eb', 0.12)}`,
+            boxShadow: isDarkMode ? '0 16px 45px rgba(0,0,0,0.2)' : '0 16px 45px rgba(15,23,42,0.06)',
+          }}
+        >
+          <Box
+            sx={{
+              px: 2,
+              py: 1,
+              borderBottom: `1px solid ${alpha('#94a3b8', 0.2)}`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 2,
+              flexWrap: 'wrap',
+              position: 'sticky',
+              top: 0,
+              zIndex: 5,
+              bgcolor: isDarkMode ? '#0f172a' : '#ffffff',
+            }}
+          >
+            <Stack direction="row" spacing={1.2} alignItems="center">
+              <Typography variant="subtitle1" fontWeight={950}>
+                Liste des articles
+              </Typography>
+
+              <Chip
+                size="small"
+                label={`${filteredArticles.length} résultat(s)`}
+                color="primary"
+                sx={{ fontWeight: 900, borderRadius: 2 }}
+              />
+            </Stack>
+
+            {paginationTop}
+          </Box>
+
+          <TableContainer component={Paper} elevation={0} sx={{ maxHeight: 'calc(100vh - 330px)' }}>
+            <Table stickyHeader size="small">
+              <TableHead
+                sx={{
+                  bgcolor: isDarkMode ? alpha('#2563eb', 0.12) : alpha('#2563eb', 0.08),
+                }}
+              >
                 <TableRow>
-                  <TableCell>Code-barres</TableCell>
-                  <TableCell>Libellé</TableCell>
-                  <TableCell>Prix vente HT</TableCell>
-                  <TableCell>Prix achat HT</TableCell>
-                  <TableCell>Catégorie / Famille</TableCell>
-                  <TableCell>Fournisseur</TableCell>
-                  <TableCell>Photo</TableCell>
-                  <TableCell>Actions</TableCell>
+                  <TableCell sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Code-barres</TableCell>
+                  <TableCell sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Libellé</TableCell>
+                  <TableCell sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Prix vente HT</TableCell>
+                  <TableCell sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Prix achat HT</TableCell>
+                  <TableCell sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Famille</TableCell>
+                  <TableCell sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Fournisseur</TableCell>
+                  <TableCell sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Photo</TableCell>
+                  <TableCell sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
 
@@ -836,10 +1088,40 @@ const Articles: React.FC = () => {
                 {filteredArticles
                   .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                   .map((article) => (
-                    <TableRow key={article.ARCLEUNIK}>
-                      <TableCell>{article.Code_Barres || '-'}</TableCell>
-                      <TableCell>{article.LIBELLE || '-'}</TableCell>
-                      <TableCell>{formatPrice(article.Prix_Vente_HT)}</TableCell>
+                    <TableRow
+                      key={article.ARCLEUNIK}
+                      hover
+                      sx={{
+                        '&:hover': {
+                          bgcolor: isDarkMode ? alpha('#2563eb', 0.08) : alpha('#2563eb', 0.04),
+                        },
+                        '& td': {
+                          py: 0.8,
+                          fontSize: '0.82rem',
+                        },
+                      }}
+                    >
+                      <TableCell>
+                        <Chip
+                          label={article.Code_Barres || '-'}
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontWeight: 700, borderRadius: 1.5, height: 23, fontSize: '0.72rem' }}
+                        />
+                      </TableCell>
+
+                      <TableCell>
+                        <Typography fontWeight={850} fontSize="0.84rem">
+                          {article.LIBELLE || '-'}
+                        </Typography>
+                      </TableCell>
+
+                      <TableCell>
+                        <Typography fontWeight={800} color="primary" fontSize="0.84rem">
+                          {formatPrice(article.Prix_Vente_HT)}
+                        </Typography>
+                      </TableCell>
+
                       <TableCell>{formatPrice(article.Prix_Achat_HT)}</TableCell>
                       <TableCell>{getFamilleName(article)}</TableCell>
                       <TableCell>{getFournisseurName(article)}</TableCell>
@@ -851,55 +1133,69 @@ const Articles: React.FC = () => {
                               size="small"
                               color="success"
                               variant="contained"
-                              startIcon={<Image />}
+                              startIcon={<Image fontSize="small" />}
                               onClick={() => handleVoirPhoto(article)}
+                              sx={{
+                                borderRadius: 2,
+                                textTransform: 'none',
+                                fontWeight: 800,
+                                py: 0.3,
+                                px: 1,
+                                fontSize: '0.72rem',
+                              }}
                             >
-                              Voir photo
+                              Voir
                             </Button>
                           </Tooltip>
                         ) : (
-                          <Chip label="Aucune photo" color="error" size="small" variant="outlined" />
+                          <Chip label="Aucune" color="warning" size="small" variant="outlined" sx={{ height: 23 }} />
                         )}
                       </TableCell>
 
                       <TableCell>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Box sx={{ display: 'flex', gap: 0.7 }}>
                           <Tooltip title="Modifier">
-                            <IconButton onClick={() => handleEditClick(article)}>
-                              <Edit color="primary" />
+                            <IconButton
+                              size="small"
+                              onClick={() => handleEditClick(article)}
+                              sx={{ bgcolor: alpha('#2563eb', 0.1), '&:hover': { bgcolor: alpha('#2563eb', 0.18) } }}
+                            >
+                              <Edit color="primary" fontSize="small" />
                             </IconButton>
                           </Tooltip>
 
                           <Tooltip title="Supprimer">
-                            <IconButton onClick={() => handleDeleteClick(article)}>
-                              <Delete color="error" />
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteClick(article)}
+                              sx={{ bgcolor: alpha('#ef4444', 0.1), '&:hover': { bgcolor: alpha('#ef4444', 0.18) } }}
+                            >
+                              <Delete color="error" fontSize="small" />
                             </IconButton>
                           </Tooltip>
                         </Box>
                       </TableCell>
                     </TableRow>
                   ))}
+
+                {filteredArticles.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                      <Typography color="text.secondary">Aucun article trouvé</Typography>
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </TableContainer>
-
-          <TablePagination
-            component="div"
-            count={filteredArticles.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-            labelRowsPerPage="Lignes par page"
-          />
         </Card>
       )}
 
       <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Ajouter un article</DialogTitle>
+        <DialogTitle fontWeight={950}>Ajouter un article</DialogTitle>
         <DialogContent>{renderArticleForm()}</DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateDialogOpen(false)} startIcon={<Cancel />}>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setCreateDialogOpen(false)} startIcon={<Cancel />} sx={{ borderRadius: 2.5 }}>
             Annuler
           </Button>
           <Button
@@ -907,6 +1203,7 @@ const Articles: React.FC = () => {
             variant="contained"
             startIcon={saving ? <CircularProgress size={18} /> : <Save />}
             disabled={saving}
+            sx={{ borderRadius: 2.5, fontWeight: 900 }}
           >
             Enregistrer
           </Button>
@@ -914,10 +1211,10 @@ const Articles: React.FC = () => {
       </Dialog>
 
       <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Modifier l'article</DialogTitle>
+        <DialogTitle fontWeight={950}>Modifier l'article</DialogTitle>
         <DialogContent>{renderArticleForm()}</DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)} startIcon={<Cancel />}>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setEditDialogOpen(false)} startIcon={<Cancel />} sx={{ borderRadius: 2.5 }}>
             Annuler
           </Button>
           <Button
@@ -925,6 +1222,7 @@ const Articles: React.FC = () => {
             variant="contained"
             startIcon={saving ? <CircularProgress size={18} /> : <Save />}
             disabled={saving}
+            sx={{ borderRadius: 2.5, fontWeight: 900 }}
           >
             Enregistrer
           </Button>
@@ -932,7 +1230,7 @@ const Articles: React.FC = () => {
       </Dialog>
 
       <Dialog open={photoDialogOpen} onClose={() => setPhotoDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Photo de l'article</DialogTitle>
+        <DialogTitle fontWeight={950}>Photo de l'article</DialogTitle>
 
         <DialogContent dividers>
           <Typography variant="h6" sx={{ mb: 2 }}>
@@ -948,8 +1246,8 @@ const Articles: React.FC = () => {
                 width: '100%',
                 maxHeight: 420,
                 objectFit: 'contain',
-                borderRadius: 2,
-                border: '1px solid #ddd',
+                borderRadius: 3,
+                border: `1px solid ${alpha('#94a3b8', 0.25)}`,
                 backgroundColor: '#fafafa',
               }}
             />
@@ -964,14 +1262,14 @@ const Articles: React.FC = () => {
       </Dialog>
 
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle sx={{ color: 'error.main' }}>Confirmer la suppression</DialogTitle>
+        <DialogTitle sx={{ color: 'error.main', fontWeight: 950 }}>Confirmer la suppression</DialogTitle>
         <DialogContent>
           <Typography>
             Voulez-vous supprimer l'article : <strong>{articleToDelete?.LIBELLE}</strong> ?
           </Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} startIcon={<Cancel />}>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setDeleteDialogOpen(false)} startIcon={<Cancel />} sx={{ borderRadius: 2.5 }}>
             Annuler
           </Button>
           <Button
@@ -980,6 +1278,7 @@ const Articles: React.FC = () => {
             color="error"
             startIcon={<Delete />}
             disabled={saving}
+            sx={{ borderRadius: 2.5, fontWeight: 900 }}
           >
             Supprimer
           </Button>

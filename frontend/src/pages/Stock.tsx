@@ -1,39 +1,49 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
+  alpha,
   Box,
-  Typography,
+  Button,
   Card,
   CardContent,
+  Chip,
+  CircularProgress,
+  FormControl,
+  Grid,
+  InputAdornment,
+  InputLabel,
+  MenuItem,
+  Pagination,
+  Paper,
+  Select,
+  Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  InputAdornment,
-  Pagination,
-  Grid,
-  Alert,
-  CircularProgress,
-  Chip,
-  Button,
-  Checkbox,
-  FormControlLabel,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Tooltip,
+  Typography,
+  useTheme,
 } from '@mui/material';
-import { Refresh, Search, Remove, GetApp } from '@mui/icons-material';
+import {
+  ErrorOutline,
+  GetApp,
+  Inventory,
+  Refresh,
+  Search,
+  ShoppingCart,
+  Store,
+  WarningAmber,
+} from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { PermissionAlert, usePermissionAlert } from '../components/PermissionAlert';
 
-interface Stock {
+interface StockItem {
   id: number;
   magasin_id: number;
   article_id: number;
@@ -43,7 +53,6 @@ interface Stock {
   magasin_nom: string;
   article_libelle: string;
   article_code_barres: string;
-  prix_vente_ht: number | string;
   niveau_alerte: string;
 }
 
@@ -52,16 +61,6 @@ interface Magasin {
   nom_magasin?: string;
   Nom_Magasin?: string;
   nom?: string;
-}
-
-interface StatistiquesData {
-  total_articles: number;
-  alertes_critiques: number;
-  alertes_faibles: number;
-  stocks_normaux: number;
-  stocks_excessifs: number;
-  quantite_totale: number;
-  valeur_totale_ht: number;
 }
 
 const normalizeAlert = (niveau?: string) => {
@@ -75,7 +74,6 @@ const normalizeAlert = (niveau?: string) => {
 
 const getAlertLabel = (niveau?: string) => {
   const value = normalizeAlert(niveau);
-
   if (value === 'critique') return 'CRITIQUE';
   if (value === 'bas') return 'FAIBLE';
   if (value === 'excessif') return 'EXCESSIF';
@@ -84,7 +82,6 @@ const getAlertLabel = (niveau?: string) => {
 
 const getAlertColor = (niveau?: string) => {
   const value = normalizeAlert(niveau);
-
   if (value === 'critique') return 'error';
   if (value === 'bas') return 'warning';
   if (value === 'excessif') return 'info';
@@ -97,7 +94,15 @@ const toNumber = (value: unknown) => {
 };
 
 const Stock: React.FC = () => {
-  const [stocks, setStocks] = useState<Stock[]>([]);
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
+  const navigate = useNavigate();
+
+  const { user } = useAuth();
+  const { alert, showPermissionAlert, closeAlert } = usePermissionAlert();
+  const isAdmin = user?.role === 'admin';
+
+  const [stocks, setStocks] = useState<StockItem[]>([]);
   const [magasins, setMagasins] = useState<Magasin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,14 +110,6 @@ const Stock: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [magasinFilter, setMagasinFilter] = useState('');
   const [alertFilter, setAlertFilter] = useState('');
-  const [showOnlyWithStock, setShowOnlyWithStock] = useState(false);
-
-  const [sortieModalOpen, setSortieModalOpen] = useState(false);
-  const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
-  const [quantiteSortie, setQuantiteSortie] = useState('');
-  const [raisonSortie, setRaisonSortie] = useState('');
-  const [referenceSortie, setReferenceSortie] = useState('');
-  const [loadingSortie, setLoadingSortie] = useState(false);
 
   const [page, setPage] = useState(1);
   const rowsPerPage = 50;
@@ -122,7 +119,7 @@ const Stock: React.FC = () => {
     try {
       const response = await api.get('/magasins');
       setMagasins(response.data.data || response.data || []);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Erreur magasins:', err);
     }
   };
@@ -136,17 +133,22 @@ const Stock: React.FC = () => {
 
       if (magasinFilter) params.append('magasinId', magasinFilter);
       if (searchTerm) params.append('search', searchTerm);
-      if (showOnlyWithStock) params.append('withStockOnly', 'true');
       if (alertFilter) params.append('alert', alertFilter.toLowerCase());
+
+      params.append('withStockOnly', 'true');
       params.append('page', String(page));
       params.append('limit', String(rowsPerPage));
 
       const response = await api.get(`/stock-magasin?${params.toString()}`);
-      setStocks(response.data.data || []);
-      setTotalRows(response.data.total ?? 0);
+
+      const data = response.data.data || [];
+      const filteredData = data.filter((stock: StockItem) => toNumber(stock.quantite_stock) > 0);
+
+      setStocks(filteredData);
+      setTotalRows(response.data.total ?? filteredData.length);
     } catch (err: any) {
       console.error('Erreur stocks:', err);
-      setError(err.response?.data?.message || 'Erreur lors du chargement des stocks');
+      setError(err.response?.data?.message || err.response?.data?.error || 'Erreur lors du chargement des stocks');
     } finally {
       setLoading(false);
     }
@@ -158,20 +160,16 @@ const Stock: React.FC = () => {
 
   useEffect(() => {
     fetchStocks();
-  }, [magasinFilter, searchTerm, showOnlyWithStock, alertFilter, page]);
+  }, [magasinFilter, searchTerm, alertFilter, page]);
 
-  const totalPages = Math.max(1, Math.ceil(totalRows / rowsPerPage));
-
-  const statistiques: StatistiquesData = useMemo(() => {
+  const statistiques = useMemo(() => {
     return stocks.reduce(
       (acc, stock) => {
         const quantite = toNumber(stock.quantite_stock);
-        const prix = toNumber(stock.prix_vente_ht);
         const alerte = normalizeAlert(stock.niveau_alerte);
 
         acc.total_articles += 1;
         acc.quantite_totale += quantite;
-        acc.valeur_totale_ht += quantite * prix;
 
         if (alerte === 'critique') acc.alertes_critiques += 1;
         else if (alerte === 'bas') acc.alertes_faibles += 1;
@@ -187,14 +185,11 @@ const Stock: React.FC = () => {
         stocks_normaux: 0,
         stocks_excessifs: 0,
         quantite_totale: 0,
-        valeur_totale_ht: 0,
       }
     );
   }, [stocks]);
 
-  const handlePageChange = (_event: React.ChangeEvent<unknown>, value: number) => {
-    setPage(value);
-  };
+  const totalPages = Math.max(1, Math.ceil(totalRows / rowsPerPage));
 
   const handleRefresh = () => {
     fetchMagasins();
@@ -205,42 +200,49 @@ const Stock: React.FC = () => {
     setMagasinFilter('');
     setSearchTerm('');
     setAlertFilter('');
-    setShowOnlyWithStock(false);
     setPage(1);
   };
 
+  const handleCommander = (stock: StockItem) => {
+    if (!isAdmin) {
+      showPermissionAlert('Création de commande non autorisée. Cette action nécessite un compte administrateur.');
+      return;
+    }
+
+    navigate('/commandes', {
+      state: {
+        fromStock: true,
+        articleId: stock.article_id,
+        articleLibelle: stock.article_libelle,
+        magasinId: stock.magasin_id,
+        magasinNom: stock.magasin_nom,
+        quantiteActuelle: toNumber(stock.quantite_stock),
+        seuilMin: stock.seuil_min,
+        seuilMax: stock.seuil_max,
+        niveauAlerte: normalizeAlert(stock.niveau_alerte),
+      },
+    });
+  };
+
   const handleExportCSV = () => {
+    if (!isAdmin) {
+      showPermissionAlert('Export du stock non autorisé. Cette action nécessite un compte administrateur.');
+      return;
+    }
+
     if (stocks.length === 0) return;
 
-    const headers = [
-      'Magasin',
-      'Article',
-      'Code Barres',
-      'Quantité',
-      'Prix HT',
-      'Valeur Stock HT',
-      'Seuil Min',
-      'Seuil Max',
-      'Alerte',
-    ];
+    const headers = ['Magasin', 'Article', 'Code Barres', 'Quantité', 'Seuil Min', 'Seuil Max', 'Alerte'];
 
-    const rows = stocks.map((stock) => {
-      const quantite = toNumber(stock.quantite_stock);
-      const prix = toNumber(stock.prix_vente_ht);
-      const valeur = (quantite * prix).toFixed(2);
-
-      return [
-        stock.magasin_nom || '-',
-        stock.article_libelle || '-',
-        stock.article_code_barres || '-',
-        String(quantite),
-        prix.toFixed(2),
-        valeur,
-        String(stock.seuil_min ?? ''),
-        String(stock.seuil_max ?? ''),
-        getAlertLabel(stock.niveau_alerte),
-      ];
-    });
+    const rows = stocks.map((stock) => [
+      stock.magasin_nom || '-',
+      stock.article_libelle || '-',
+      stock.article_code_barres || '-',
+      String(toNumber(stock.quantite_stock)),
+      String(stock.seuil_min ?? ''),
+      String(stock.seuil_max ?? ''),
+      getAlertLabel(stock.niveau_alerte),
+    ]);
 
     const csv = [headers, ...rows]
       .map((row) => row.map((field) => `"${String(field).replace(/"/g, '""')}"`).join(','))
@@ -249,163 +251,258 @@ const Stock: React.FC = () => {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+
     a.href = url;
     a.download = `stocks_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
+
     URL.revokeObjectURL(url);
   };
+const quantiteParMagasin = useMemo(() => {
+  const result: Record<string, number> = {};
 
-  const handleOpenSortieModal = (stock: Stock) => {
-    setSelectedStock(stock);
-    setQuantiteSortie('1');
-    setRaisonSortie('');
-    setReferenceSortie('');
-    setSortieModalOpen(true);
-  };
+  stocks.forEach((stock) => {
+    const magasin = stock.magasin_nom || 'Magasin inconnu';
+    result[magasin] = (result[magasin] || 0) + toNumber(stock.quantite_stock);
+  });
 
-  const handleCloseSortieModal = () => {
-    setSortieModalOpen(false);
-    setSelectedStock(null);
-    setQuantiteSortie('');
-    setRaisonSortie('');
-    setReferenceSortie('');
-  };
+  return result;
+}, [stocks]);
 
-  const handleSortieStock = async () => {
-    if (!selectedStock || !quantiteSortie || toNumber(quantiteSortie) <= 0) {
-      setError('Veuillez indiquer une quantité correcte');
-      return;
-    }
+const magasinsCards = Object.entries(quantiteParMagasin)
+  .slice(0, 3)
+  .map(([magasin, quantite], index) => ({
+    label: magasin,
+    value: quantite,
+    description: 'Unités en stock',
+    color: ['#f97316', '#7c3aed', '#0ea5e9'][index % 3],
+    icon: <Store fontSize="small" />,
+  }));
 
-    const quantite = toNumber(quantiteSortie);
-    const quantiteDisponible = toNumber(selectedStock.quantite_stock);
-
-    if (quantite > quantiteDisponible) {
-      setError(`Impossible de sortir ${quantite} unités. Stock disponible : ${quantiteDisponible} unités`);
-      return;
-    }
-
-    try {
-      setLoadingSortie(true);
-      setError(null);
-
-      // Route existante dans ton backend pour les mouvements.
-      // Si elle n'existe pas encore, remplace cette partie par un simple PUT /stock-magasin/:id.
-      try {
-        await api.post('/mouvements-stock/sortie', {
-          stock_id: selectedStock.id,
-          quantite,
-          raison: raisonSortie || 'Sortie manuelle',
-          reference_document: referenceSortie,
-        });
-      } catch {
-        await api.put(`/stock-magasin/${selectedStock.id}`, {
-          quantite_stock: quantiteDisponible - quantite,
-        });
-      }
-
-      setStocks((previousStocks) =>
-        previousStocks.map((stock) =>
-          stock.id === selectedStock.id
-            ? { ...stock, quantite_stock: quantiteDisponible - quantite }
-            : stock
-        )
-      );
-
-      handleCloseSortieModal();
-      await fetchStocks();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Erreur lors de la sortie du stock');
-    } finally {
-      setLoadingSortie(false);
-    }
-  };
+const statCards = [
+  {
+    label: 'Lignes stock',
+    value: statistiques.total_articles,
+    description: 'Articles disponibles',
+    color: '#2563eb',
+    icon: <Inventory fontSize="small" />,
+  },
+  {
+    label: 'Quantité totale',
+    value: statistiques.quantite_totale,
+    description: 'Unités disponibles',
+    color: '#16a34a',
+    icon: <Store fontSize="small" />,
+  },
+  ...magasinsCards,
+];
+  
 
   if (loading && stocks.length === 0) {
     return (
-      <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <CircularProgress />
-        <Typography sx={{ ml: 2 }}>Chargement des stocks...</Typography>
+      <Box
+        sx={{
+          minHeight: '45vh',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          background: isDarkMode
+            ? 'linear-gradient(135deg, #07111f 0%, #0f172a 100%)'
+            : 'linear-gradient(135deg, #eef4ff 0%, #f8fafc 45%, #ffffff 100%)',
+        }}
+      >
+        <CircularProgress size={48} />
+        <Typography variant="subtitle1" sx={{ ml: 2 }}>
+          Chargement des stocks disponibles...
+        </Typography>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box
+      sx={{
+        p: { xs: 1.5, md: 2 },
+        minHeight: '100vh',
+        background: isDarkMode
+          ? 'linear-gradient(135deg, #07111f 0%, #0f172a 100%)'
+          : 'linear-gradient(135deg, #eef4ff 0%, #f8fafc 45%, #ffffff 100%)',
+      }}
+    >
       <Box
         sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 3,
-          flexWrap: 'wrap',
-          gap: 1,
+          mb: 2,
+          p: { xs: 2, md: 2.5 },
+          borderRadius: 3.5,
+          background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #0f172a 100%)',
+          color: '#fff',
+          boxShadow: '0 16px 45px rgba(37,99,235,0.22)',
+          position: 'relative',
+          overflow: 'hidden',
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            width: 240,
+            height: 240,
+            borderRadius: '50%',
+            bgcolor: 'rgba(255,255,255,0.1)',
+            right: -70,
+            top: -100,
+          },
         }}
       >
-        <Typography variant="h4">Gestion des Stocks</Typography>
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          justifyContent="space-between"
+          alignItems={{ xs: 'flex-start', md: 'center' }}
+          spacing={2}
+          sx={{ position: 'relative', zIndex: 1 }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box
+              sx={{
+                width: 46,
+                height: 46,
+                borderRadius: 2.5,
+                display: 'grid',
+                placeItems: 'center',
+                bgcolor: 'rgba(255,255,255,0.16)',
+                border: '1px solid rgba(255,255,255,0.22)',
+              }}
+            >
+              <Inventory sx={{ fontSize: 27 }} />
+            </Box>
 
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Button variant="outlined" startIcon={<Refresh />} onClick={handleRefresh} disabled={loading}>
-            Actualiser
-          </Button>
-          <Button variant="outlined" onClick={handleResetFilters} disabled={loading}>
-            Réinitialiser les filtres
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<GetApp />}
-            onClick={handleExportCSV}
-            disabled={stocks.length === 0}
-          >
-            Exporter CSV
-          </Button>
-        </Box>
+            <Box>
+              <Typography variant="h5" fontWeight={950}>
+                Gestion des stocks
+              </Typography>
+
+              <Typography sx={{ color: 'rgba(255,255,255,0.75)', fontWeight: 600, fontSize: '0.85rem' }}>
+                Quantités disponibles, seuils et commandes de réapprovisionnement
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Refresh />}
+              onClick={handleRefresh}
+              disabled={loading}
+              sx={{
+                px: 2.2,
+                py: 1,
+                borderRadius: 2.5,
+                textTransform: 'none',
+                fontWeight: 900,
+                color: '#fff',
+                borderColor: 'rgba(255,255,255,0.45)',
+                '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.08)' },
+              }}
+            >
+              Actualiser
+            </Button>
+
+            <Tooltip title={isAdmin ? 'Exporter le stock' : 'Action réservée à l’administrateur'}>
+              <span>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<GetApp />}
+                  onClick={handleExportCSV}
+                  disabled={!isAdmin || stocks.length === 0}
+                  sx={{
+                    px: 2.2,
+                    py: 1,
+                    borderRadius: 2.5,
+                    textTransform: 'none',
+                    fontWeight: 900,
+                    bgcolor: '#fff',
+                    color: '#1d4ed8',
+                    '&:hover': { bgcolor: '#eff6ff', transform: 'translateY(-2px)' },
+                  }}
+                >
+                  Exporter CSV
+                </Button>
+              </span>
+            </Tooltip>
+          </Stack>
+        </Stack>
       </Box>
 
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}>
-          <Card sx={{ borderLeft: 4, borderColor: 'primary.main' }}>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Total lignes stock</Typography>
-              <Typography variant="h5">{statistiques.total_articles}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2.5 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
 
-        <Grid item xs={12} md={3}>
-          <Card sx={{ borderLeft: 4, borderColor: 'error.main' }}>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Alertes critiques</Typography>
-              <Typography variant="h5" color="error">{statistiques.alertes_critiques}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        {statCards.map((stat) => (
+          <Grid item xs={12} sm={6} md={2.4} key={stat.label}>
+            <Card
+              sx={{
+                height: '100%',
+                borderRadius: 3,
+                bgcolor: isDarkMode ? '#0f172a' : '#ffffff',
+                border: `1px solid ${alpha(stat.color, 0.18)}`,
+                boxShadow: isDarkMode
+                  ? '0 12px 30px rgba(0,0,0,0.2)'
+                  : '0 12px 30px rgba(15,23,42,0.06)',
+              }}
+            >
+              <CardContent sx={{ p: 1.8, '&:last-child': { pb: 1.8 } }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Box>
+                    <Typography color="text.secondary" fontWeight={800} fontSize="0.78rem">
+                      {stat.label}
+                    </Typography>
 
-        <Grid item xs={12} md={3}>
-          <Card sx={{ borderLeft: 4, borderColor: 'warning.main' }}>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Alertes faibles</Typography>
-              <Typography variant="h5" color="warning.main">{statistiques.alertes_faibles}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+                    <Typography variant="h6" fontWeight={950} sx={{ color: stat.color, mt: 0.2 }}>
+                      {stat.value}
+                    </Typography>
 
-        <Grid item xs={12} md={3}>
-          <Card sx={{ borderLeft: 4, borderColor: 'success.main' }}>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Valeur stock HT</Typography>
-              <Typography variant="h5">{statistiques.valeur_totale_ht.toFixed(2)} €</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+                    <Typography color="text.secondary" fontSize="0.78rem">
+                      {stat.description}
+                    </Typography>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 2.5,
+                      display: 'grid',
+                      placeItems: 'center',
+                      bgcolor: alpha(stat.color, 0.12),
+                      color: stat.color,
+                    }}
+                  >
+                    {stat.icon}
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Grid container spacing={2} alignItems="center">
+      <Card
+        sx={{
+          mb: 2,
+          borderRadius: 3,
+          bgcolor: isDarkMode ? '#0f172a' : '#ffffff',
+          border: `1px solid ${alpha('#2563eb', 0.12)}`,
+          boxShadow: isDarkMode ? '0 14px 38px rgba(0,0,0,0.2)' : '0 14px 38px rgba(15,23,42,0.06)',
+        }}
+      >
+        <CardContent sx={{ p: 1.8, '&:last-child': { pb: 1.8 } }}>
+          <Grid container spacing={1.5} alignItems="center">
             <Grid item xs={12} md={3}>
-              <FormControl fullWidth>
+              <FormControl fullWidth size="small">
                 <InputLabel>Magasin</InputLabel>
+
                 <Select
                   value={magasinFilter}
                   label="Magasin"
@@ -415,6 +512,7 @@ const Stock: React.FC = () => {
                   }}
                 >
                   <MenuItem value="">Tous les magasins</MenuItem>
+
                   {magasins.map((magasin) => (
                     <MenuItem key={magasin.id} value={String(magasin.id)}>
                       {magasin.nom_magasin || magasin.Nom_Magasin || magasin.nom || `Magasin ${magasin.id}`}
@@ -424,9 +522,10 @@ const Stock: React.FC = () => {
               </FormControl>
             </Grid>
 
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
+                size="small"
                 label="Rechercher un article"
                 value={searchTerm}
                 onChange={(e) => {
@@ -436,7 +535,7 @@ const Stock: React.FC = () => {
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <Search />
+                      <Search fontSize="small" />
                     </InputAdornment>
                   ),
                 }}
@@ -444,8 +543,9 @@ const Stock: React.FC = () => {
             </Grid>
 
             <Grid item xs={12} md={3}>
-              <FormControl fullWidth>
+              <FormControl fullWidth size="small">
                 <InputLabel>Niveau d'alerte</InputLabel>
+
                 <Select
                   value={alertFilter}
                   label="Niveau d'alerte"
@@ -463,192 +563,198 @@ const Stock: React.FC = () => {
               </FormControl>
             </Grid>
 
-            <Grid item xs={12} md={3}>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={showOnlyWithStock}
-                    onChange={(e) => {
-                      setShowOnlyWithStock(e.target.checked);
-                      setPage(1);
-                    }}
-                    color="primary"
-                  />
-                }
-                label="Stock > 0"
-              />
+            <Grid item xs={12} md={2}>
+              <Button
+                fullWidth
+                variant="outlined"
+                size="small"
+                onClick={handleResetFilters}
+                disabled={loading}
+                sx={{ height: 40, borderRadius: 2.5, textTransform: 'none', fontWeight: 800 }}
+              >
+                Reset
+              </Button>
             </Grid>
           </Grid>
         </CardContent>
       </Card>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+      <Card
+        sx={{
+          borderRadius: 3,
+          overflow: 'hidden',
+          bgcolor: isDarkMode ? '#0f172a' : '#ffffff',
+          border: `1px solid ${alpha('#2563eb', 0.12)}`,
+          boxShadow: isDarkMode ? '0 16px 45px rgba(0,0,0,0.2)' : '0 16px 45px rgba(15,23,42,0.06)',
+        }}
+      >
+        <Box
+          sx={{
+            px: 2,
+            py: 1,
+            borderBottom: `1px solid ${alpha('#94a3b8', 0.2)}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 2,
+            flexWrap: 'wrap',
+            position: 'sticky',
+            top: 0,
+            zIndex: 5,
+            bgcolor: isDarkMode ? '#0f172a' : '#ffffff',
+          }}
+        >
+          <Stack direction="row" spacing={1.2} alignItems="center">
+            <Typography variant="subtitle1" fontWeight={950}>
+              Liste des stocks disponibles
+            </Typography>
 
-      <Card>
-        <CardContent>
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Magasin</TableCell>
-                  <TableCell>Article</TableCell>
-                  <TableCell>Code-barres</TableCell>
-                  <TableCell align="right">Quantité</TableCell>
-                  <TableCell align="right">Prix HT</TableCell>
-                  <TableCell align="right">Valeur stock HT</TableCell>
-                  <TableCell align="right">Seuil min</TableCell>
-                  <TableCell align="right">Seuil max</TableCell>
-                  <TableCell align="center">Alerte</TableCell>
-                  <TableCell align="center">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-
-              <TableBody>
-                {stocks.map((stock) => {
-                  const quantite = toNumber(stock.quantite_stock);
-                  const prix = toNumber(stock.prix_vente_ht);
-                  const valeurStock = (quantite * prix).toFixed(2);
-
-                  return (
-                    <TableRow
-                      key={stock.id}
-                      hover
-                      sx={{
-                        backgroundColor:
-                          normalizeAlert(stock.niveau_alerte) === 'critique'
-                            ? 'rgba(255, 0, 0, 0.06)'
-                            : normalizeAlert(stock.niveau_alerte) === 'bas'
-                              ? 'rgba(255, 152, 0, 0.06)'
-                              : 'inherit',
-                      }}
-                    >
-                      <TableCell>{stock.magasin_nom || '-'}</TableCell>
-                      <TableCell>{stock.article_libelle || '-'}</TableCell>
-                      <TableCell>{stock.article_code_barres || '-'}</TableCell>
-                      <TableCell align="right">{quantite}</TableCell>
-                      <TableCell align="right">{prix.toFixed(2)} €</TableCell>
-                      <TableCell align="right">{valeurStock} €</TableCell>
-                      <TableCell align="right">{stock.seuil_min ?? '-'}</TableCell>
-                      <TableCell align="right">{stock.seuil_max ?? '-'}</TableCell>
-                      <TableCell align="center">
-                        <Chip
-                          label={getAlertLabel(stock.niveau_alerte)}
-                          color={getAlertColor(stock.niveau_alerte) as any}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<Remove />}
-                          onClick={() => handleOpenSortieModal(stock)}
-                          disabled={quantite <= 0}
-                          color="warning"
-                        >
-                          Sortir
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-
-          {stocks.length === 0 && !loading && (
-            <Box sx={{ py: 4, textAlign: 'center' }}>
-              <Typography>Aucun stock trouvé avec ces filtres.</Typography>
-            </Box>
-          )}
-
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-            <Pagination
-              count={totalPages}
-              page={page}
-              onChange={handlePageChange}
+            <Chip
+              size="small"
+              label={`${totalRows} résultat(s)`}
               color="primary"
-              showFirstButton
-              showLastButton
+              sx={{ fontWeight: 900, borderRadius: 2 }}
             />
-          </Box>
-        </CardContent>
+          </Stack>
+
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={(_event, value) => {
+              setPage(value);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            color="primary"
+            size="small"
+            showFirstButton
+            showLastButton
+          />
+        </Box>
+
+        <TableContainer component={Paper} elevation={0} sx={{ maxHeight: 'calc(100vh - 340px)' }}>
+          <Table stickyHeader size="small">
+            <TableHead sx={{ bgcolor: isDarkMode ? alpha('#2563eb', 0.12) : alpha('#2563eb', 0.08) }}>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Magasin</TableCell>
+                <TableCell sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Article</TableCell>
+                <TableCell sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Code-barres</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Quantité</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Seuil min</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Seuil max</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Alerte</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 900, fontSize: '0.78rem', py: 1 }}>Action</TableCell>
+              </TableRow>
+            </TableHead>
+
+            <TableBody>
+              {stocks.map((stock) => {
+                const quantite = toNumber(stock.quantite_stock);
+                const alertLevel = normalizeAlert(stock.niveau_alerte);
+                const mustOrder = alertLevel === 'critique' || alertLevel === 'bas';
+
+                return (
+                  <TableRow
+                    key={stock.id}
+                    hover
+                    sx={{
+                      bgcolor:
+                        alertLevel === 'critique'
+                          ? alpha('#ef4444', isDarkMode ? 0.16 : 0.08)
+                          : alertLevel === 'bas'
+                            ? alpha('#f97316', isDarkMode ? 0.14 : 0.07)
+                            : 'inherit',
+                      '&:hover': {
+                        bgcolor: isDarkMode ? alpha('#2563eb', 0.08) : alpha('#2563eb', 0.04),
+                      },
+                      '& td': { py: 0.8, fontSize: '0.82rem' },
+                    }}
+                  >
+                    <TableCell>
+                      <Typography fontWeight={800} fontSize="0.84rem">
+                        {stock.magasin_nom || '-'}
+                      </Typography>
+                    </TableCell>
+
+                    <TableCell>
+                      <Typography fontWeight={900} fontSize="0.84rem">
+                        {stock.article_libelle || '-'}
+                      </Typography>
+                    </TableCell>
+
+                    <TableCell>
+                      <Chip
+                        label={stock.article_code_barres || '-'}
+                        size="small"
+                        variant="outlined"
+                        sx={{ borderRadius: 1.5, fontWeight: 700, height: 23, fontSize: '0.72rem' }}
+                      />
+                    </TableCell>
+
+                    <TableCell align="right">
+                      <Typography fontWeight={950} fontSize="0.84rem">
+                        {quantite}
+                      </Typography>
+                    </TableCell>
+
+                    <TableCell align="right">{stock.seuil_min ?? '-'}</TableCell>
+                    <TableCell align="right">{stock.seuil_max ?? '-'}</TableCell>
+
+                    <TableCell align="center">
+                      <Chip
+                        label={getAlertLabel(stock.niveau_alerte)}
+                        color={getAlertColor(stock.niveau_alerte) as any}
+                        size="small"
+                        sx={{ fontWeight: 900, borderRadius: 1.5, height: 24, fontSize: '0.7rem' }}
+                      />
+                    </TableCell>
+
+                    <TableCell align="center">
+                      {mustOrder ? (
+                        <Tooltip title={isAdmin ? 'Créer une commande pour cet article' : 'Action réservée à l’administrateur'}>
+                          <span>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={<ShoppingCart fontSize="small" />}
+                              onClick={() => handleCommander(stock)}
+                              disabled={!isAdmin}
+                              color={alertLevel === 'critique' ? 'error' : 'warning'}
+                              sx={{
+                                borderRadius: 2,
+                                textTransform: 'none',
+                                fontWeight: 900,
+                                fontSize: '0.72rem',
+                                py: 0.45,
+                                px: 1.2,
+                              }}
+                            >
+                              Commander
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <Typography color="text.secondary" fontWeight={800}>
+                          -
+                        </Typography>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+
+              {stocks.length === 0 && !loading && (
+                <TableRow>
+                  <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                    <Typography color="text.secondary">Aucun stock disponible avec ces filtres.</Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Card>
 
-      <Dialog open={sortieModalOpen} onClose={handleCloseSortieModal} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Remove color="warning" />
-            <Typography variant="h6">Sortir du stock</Typography>
-          </Box>
-        </DialogTitle>
-
-        <DialogContent>
-          {selectedStock && (
-            <Box>
-              <Typography variant="body2" color="textSecondary" gutterBottom>
-                Article : <strong>{selectedStock.article_libelle}</strong>
-              </Typography>
-              <Typography variant="body2" color="textSecondary" gutterBottom>
-                Magasin : <strong>{selectedStock.magasin_nom}</strong>
-              </Typography>
-              <Typography variant="body2" color="textSecondary" gutterBottom>
-                Stock disponible : <strong>{toNumber(selectedStock.quantite_stock)} unités</strong>
-              </Typography>
-
-              <TextField
-                fullWidth
-                margin="normal"
-                label="Quantité à sortir"
-                type="number"
-                value={quantiteSortie}
-                onChange={(e) => setQuantiteSortie(e.target.value)}
-                inputProps={{ min: 1, max: toNumber(selectedStock.quantite_stock) }}
-                helperText={`Maximum : ${toNumber(selectedStock.quantite_stock)} unités`}
-              />
-
-              <TextField
-                fullWidth
-                margin="normal"
-                label="Raison de la sortie"
-                multiline
-                rows={3}
-                value={raisonSortie}
-                onChange={(e) => setRaisonSortie(e.target.value)}
-                placeholder="Ex : Vente client, casse, correction stock..."
-              />
-
-              <TextField
-                fullWidth
-                margin="normal"
-                label="Référence optionnelle"
-                value={referenceSortie}
-                onChange={(e) => setReferenceSortie(e.target.value)}
-                placeholder="Ex : Facture #123, Bon de sortie #456"
-              />
-            </Box>
-          )}
-        </DialogContent>
-
-        <DialogActions>
-          <Button onClick={handleCloseSortieModal} disabled={loadingSortie}>
-            Annuler
-          </Button>
-          <Button
-            onClick={handleSortieStock}
-            variant="contained"
-            color="warning"
-            disabled={loadingSortie || !quantiteSortie || toNumber(quantiteSortie) <= 0}
-            startIcon={loadingSortie ? <CircularProgress size={20} /> : <Remove />}
-          >
-            {loadingSortie ? 'Traitement...' : 'Sortir du stock'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <PermissionAlert message={alert.message} open={alert.open} onClose={closeAlert} />
     </Box>
   );
 };
