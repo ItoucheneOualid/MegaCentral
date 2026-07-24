@@ -20,18 +20,24 @@ import stockMagasinRoutes from './routes/stockMagasinRoutes';
 import mouvementsStockRoutes from './routes/mouvementsStockRoutes';
 
 import { DatabaseService } from './services/databaseService';
+import { getOptionalEnvVar } from './config/env';
 
 const app = express();
 
 app.use(helmet());
 
+// Dynamically configure CORS based on environment
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? (process.env.ALLOWED_ORIGINS || '').split(',').map(origin => origin.trim())
+  : [
+      'http://localhost:3001',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:8080'
+    ];
+
 app.use(cors({
-  origin: [
-    'http://localhost:3001',
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://localhost:8080'
-  ],
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT','PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -49,7 +55,11 @@ app.use('/api/tva', tvaRoutes);
 app.use('/api/magasins', magasinRoutes);
 app.use('/api/send-email', emailRoutes);
 app.use('/api/photos', photosRoutes);
-app.use('/api/debug', debugRoutes);
+
+// Debug routes only in development
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/debug', debugRoutes);
+}
 
 // Articles
 app.use('/api/articles', articlesRoutes);
@@ -68,14 +78,10 @@ app.use('/api/fournisseurs', fournisseursRoutes);
 app.use('/api/commandes', commandesRoutes);
 app.use('/api/rapports-z', rapportsZRoutes);
 
-console.log('✅ Routes API enregistrées');
-
 // Initialiser la connexion au démarrage
 DatabaseService.initializeConnection().then((connected) => {
-  if (connected) {
-    console.log('✅ MEGA-Central Backend prêt !');
-  } else {
-    console.log('❌ MEGA-Central Backend non prêt - vérifiez la connexion MySQL');
+  if (connected && process.env.NODE_ENV === 'production') {
+    console.log('[INFO] MEGA-Central Backend - Production ready');
   }
 });
 

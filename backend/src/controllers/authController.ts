@@ -2,8 +2,9 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import DatabaseService from '../services/databaseService';
+import { getRequiredEnvVar } from '../config/env';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'votre-secret-j tres-securise';
+const JWT_SECRET = getRequiredEnvVar('JWT_SECRET');
 
 export class AuthController {
   static async login(req: Request, res: Response) {

@@ -59,7 +59,7 @@ export class CommandesController {
         FROM articles
         WHERE LIBELLE IS NOT NULL
         ORDER BY LIBELLE ASC
-        LIMIT 200
+        LIMIT 2000
       `);
 
       res.json({
@@ -236,33 +236,32 @@ export class CommandesController {
       let totalTTC = 0;
 
       for (const ligne of lignes) {
-  const quantite = Number(ligne.quantite || 0);
-  const prixUnitaire = Number(ligne.prixUnitaire || 0);
+        const quantite = Number(ligne.quantite || 0);
+        const prixUnitaire = Number(ligne.prixUnitaire || 0);
+        const tauxTVA = Number(ligne.tauxTVA || 21);
 
-  if (quantite < 0) {
-    return res.status(400).json({
-      success: false,
-      error: 'La quantité ne peut pas être négative',
-    });
-  }
+        if (quantite <= 0) {
+          return res.status(400).json({
+            success: false,
+            error: 'La quantité doit être supérieure à 0',
+          });
+        }
 
-  if (prixUnitaire < 0) {
-    return res.status(400).json({
-      success: false,
-      error: 'Le prix unitaire ne peut pas être négatif',
-    });
-  }
+        if (prixUnitaire < 0) {
+          return res.status(400).json({
+            success: false,
+            error: 'Le prix unitaire ne peut pas être négatif',
+          });
+        }
 
-  const tauxTVA = Number(ligne.tauxTVA || 21);
+        const ligneHT = quantite * prixUnitaire;
+        const ligneTVA = ligneHT * (tauxTVA / 100);
+        const ligneTTC = ligneHT + ligneTVA;
 
-  const ligneHT = quantite * prixUnitaire;
-  const ligneTVA = ligneHT * (tauxTVA / 100);
-  const ligneTTC = ligneHT + ligneTVA;
-
-  totalHT += ligneHT;
-  totalTVA += ligneTVA;
-  totalTTC += ligneTTC;
-}
+        totalHT += ligneHT;
+        totalTVA += ligneTVA;
+        totalTTC += ligneTTC;
+      }
 
       const statutValue =
         typeof statut === 'string' && statut.length > 0
@@ -353,7 +352,7 @@ export class CommandesController {
             null,
             null,
             String(index + 1),
-            ligne.codeBarres ? String(ligne.codeBarres).substring(0, 2) : null,
+            ligne.magasinId ? String(ligne.magasinId) : null,
           ]
         );
       }
@@ -429,6 +428,32 @@ export class CommandesController {
         });
       }
 
+      const existing = await DatabaseService.query(
+        `
+        SELECT Etat
+        FROM bc_frn
+        WHERE CFCLEUNIK = ?
+        LIMIT 1
+        `,
+        [id]
+      );
+
+      if (existing.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Commande non trouvée',
+        });
+      }
+
+      const ancienStatut = existing[0].Etat;
+
+      if (ancienStatut === 'R' && statut !== 'R') {
+        return res.status(400).json({
+          success: false,
+          error: 'Une commande réceptionnée ne peut plus changer de statut.',
+        });
+      }
+
       await DatabaseService.query(
         `
         UPDATE bc_frn
@@ -438,40 +463,81 @@ export class CommandesController {
         [statut, id]
       );
 
+      if (statut === 'R' && ancienStatut !== 'R') {
+        const lignes = await DatabaseService.query(
+          `
+          SELECT
+            ARCLEUNIK AS articleId,
+            Quantite AS quantite,
+            Code2 AS magasinId
+          FROM bc_lignes
+          WHERE CFCLEUNIK = ?
+            AND ARCLEUNIK IS NOT NULL
+            AND Quantite > 0
+          `,
+          [id]
+        );
+
+        for (const ligne of lignes) {
+          const articleId = Number(ligne.articleId);
+          const quantite = Number(ligne.quantite || 0);
+          const magasinId = Number(ligne.magasinId || 0);
+
+          if (!articleId || quantite <= 0) continue;
+
+          let stockRows = [];
+
+          if (magasinId > 0) {
+            stockRows = await DatabaseService.query(
+              `
+              SELECT id
+              FROM stock_magasin
+              WHERE article_id = ? AND magasin_id = ?
+              LIMIT 1
+              `,
+              [articleId, magasinId]
+            );
+          }
+
+          if (stockRows.length === 0) {
+            stockRows = await DatabaseService.query(
+              `
+              SELECT id
+              FROM stock_magasin
+              WHERE article_id = ?
+              ORDER BY id ASC
+              LIMIT 1
+              `,
+              [articleId]
+            );
+          }
+
+          if (stockRows.length > 0) {
+            await DatabaseService.query(
+              `
+              UPDATE stock_magasin
+              SET quantite_stock = quantite_stock + ?
+              WHERE id = ?
+              `,
+              [quantite, stockRows[0].id]
+            );
+          }
+        }
+      }
+
       res.json({
         success: true,
-        message: 'Statut mis à jour avec succès',
+        message:
+          statut === 'R'
+            ? 'Commande réceptionnée et stock mis à jour avec succès'
+            : 'Statut mis à jour avec succès',
       });
     } catch (error) {
       console.error('Erreur updateStatutCommande:', error);
       res.status(500).json({
         success: false,
         error: 'Erreur lors de la mise à jour du statut',
-      });
-    }
-  }
-
-  static async deleteCommande(req: Request, res: Response) {
-    try {
-      const { id } = req.params;
-
-      await DatabaseService.query('DELETE FROM bc_lignes WHERE CFCLEUNIK = ?', [
-        id,
-      ]);
-
-      await DatabaseService.query('DELETE FROM bc_frn WHERE CFCLEUNIK = ?', [
-        id,
-      ]);
-
-      res.json({
-        success: true,
-        message: 'Commande supprimée avec succès',
-      });
-    } catch (error) {
-      console.error('Erreur deleteCommande:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Erreur lors de la suppression de la commande',
+        detail: error instanceof Error ? error.message : 'Erreur inconnue',
       });
     }
   }
@@ -531,6 +597,20 @@ export class CommandesController {
         const quantite = Number(ligne.quantite || 0);
         const prixUnitaire = Number(ligne.prixUnitaire || 0);
         const tauxTVA = Number(ligne.tauxTVA || 21);
+
+        if (quantite <= 0) {
+          return res.status(400).json({
+            success: false,
+            error: 'La quantité doit être supérieure à 0',
+          });
+        }
+
+        if (prixUnitaire < 0) {
+          return res.status(400).json({
+            success: false,
+            error: 'Le prix unitaire ne peut pas être négatif',
+          });
+        }
 
         const ligneHT = quantite * prixUnitaire;
         const ligneTVA = ligneHT * (tauxTVA / 100);
@@ -622,7 +702,7 @@ export class CommandesController {
             null,
             null,
             String(index + 1),
-            ligne.codeBarres ? String(ligne.codeBarres).substring(0, 2) : null,
+            ligne.magasinId ? String(ligne.magasinId) : null,
           ]
         );
       }
@@ -636,6 +716,32 @@ export class CommandesController {
       res.status(500).json({
         success: false,
         error: 'Erreur lors de la modification de la commande',
+        detail: error instanceof Error ? error.message : 'Erreur inconnue',
+      });
+    }
+  }
+
+  static async deleteCommande(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      await DatabaseService.query('DELETE FROM bc_lignes WHERE CFCLEUNIK = ?', [
+        id,
+      ]);
+
+      await DatabaseService.query('DELETE FROM bc_frn WHERE CFCLEUNIK = ?', [
+        id,
+      ]);
+
+      res.json({
+        success: true,
+        message: 'Commande supprimée avec succès',
+      });
+    } catch (error) {
+      console.error('Erreur deleteCommande:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erreur lors de la suppression de la commande',
       });
     }
   }
@@ -668,8 +774,14 @@ export class CommandesController {
       }
 
       const csvHeader = Object.keys(commandes[0]).join(';');
-      const csvRows = commandes.map((c: any) => Object.values(c).join(';'));
-      const csvContent = [csvHeader, ...csvRows].join('\n');
+
+      const csvRows = commandes.map((row: any) =>
+        Object.values(row)
+          .map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`)
+          .join(';')
+      );
+
+      const csvContent = '\uFEFF' + [csvHeader, ...csvRows].join('\n');
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader(
@@ -678,7 +790,8 @@ export class CommandesController {
           new Date().toISOString().split('T')[0]
         }.csv"`
       );
-      res.send('\uFEFF' + csvContent);
+
+      res.send(csvContent);
     } catch (error) {
       console.error('Erreur exportCommandesCSV:', error);
       res.status(500).json({

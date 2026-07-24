@@ -20,7 +20,7 @@ import {
   ArrowBack,
   Security,
 } from '@mui/icons-material';
-import axios from 'axios';
+import api from '../services/api';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 
 export const ResetPassword: React.FC = () => {
@@ -63,8 +63,9 @@ export const ResetPassword: React.FC = () => {
 
       setIsLoading(true);
 
-      const response = await axios.post(
-        'http://localhost:3000/api/auth/reset-password',
+      const { apiConfig } = await import('../config/apiConfig');
+      const response = await api.post(
+        apiConfig.endpoints.auth.resetPassword,
         { token, password }
       );
 

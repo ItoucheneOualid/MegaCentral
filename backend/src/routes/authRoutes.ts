@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 import { AuthController } from '../controllers/authController';
 import { sendPasswordResetEmail } from '../controllers/emailController';
@@ -106,7 +107,7 @@ router.post('/reset-password', async (req, res) => {
 
     const rows = await DatabaseService.query(
       `
-      SELECT id
+      SELECT id, reset_token_expires
       FROM users
       WHERE reset_token = ?
       LIMIT 1
@@ -122,6 +123,16 @@ router.post('/reset-password', async (req, res) => {
     }
 
     const user = rows[0] as any;
+    const expires = new Date(user.reset_token_expires);
+
+    if (!expires || expires.getTime() < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Lien invalide ou expiré',
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     await DatabaseService.update(
       `
@@ -131,7 +142,7 @@ router.post('/reset-password', async (req, res) => {
           reset_token_expires = NULL
       WHERE id = ?
       `,
-      [password, user.id]
+      [hashedPassword, user.id]
     );
 
     return res.json({

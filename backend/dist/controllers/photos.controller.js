@@ -1,39 +1,75 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.addPhotoToArticle = void 0;
+exports.addPhotoToArticle = exports.getPhotoByArticleId = void 0;
 const db_1 = require("../config/db");
+const getPhotoByArticleId = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const pool = (0, db_1.getPool)();
+        const [rows] = await pool.execute(`
+      SELECT IDFOTO, ARCLEUNIK, Photo_Name, Photo_Base64
+      FROM fotos
+      WHERE ARCLEUNIK = ?
+      LIMIT 1
+      `, [id]);
+        if (!Array.isArray(rows) || rows.length === 0) {
+            res.status(200).json({
+                status: 'ok',
+                data: null,
+                message: 'Aucune photo disponible',
+            });
+            return;
+        }
+        res.status(200).json({
+            status: 'ok',
+            data: rows[0],
+        });
+    }
+    catch (error) {
+        console.error('Erreur getPhotoByArticleId:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Erreur lors de la récupération de la photo',
+        });
+    }
+};
+exports.getPhotoByArticleId = getPhotoByArticleId;
 const addPhotoToArticle = async (req, res) => {
     try {
         const { id } = req.params;
-        const { Photo_Base64, Photo_Name } = req.body;
-        if (!Photo_Base64 || !Photo_Name) {
+        const { Photo_Name, Photo_Base64 } = req.body;
+        if (!id || !Photo_Name || !Photo_Base64) {
             res.status(400).json({
                 status: 'error',
-                message: 'Photo_Base64 et Photo_Name sont requis'
+                message: 'Article, nom photo et base64 requis',
             });
             return;
         }
         const pool = (0, db_1.getPool)();
-        // Vérifier si une photo existe déjà pour cet article
-        const [existingPhotos] = await pool.execute('SELECT IDFOTO FROM fotos WHERE ARCLEUNIK = ?', [id]);
+        const [existingPhotos] = await pool.execute('SELECT IDFOTO FROM fotos WHERE ARCLEUNIK = ? LIMIT 1', [id]);
         if (Array.isArray(existingPhotos) && existingPhotos.length > 0) {
-            // Mettre à jour la photo existante
-            await pool.execute('UPDATE fotos SET Photo_Base64 = ?, Photo_Name = ?, Derniere_MAJ = NOW() WHERE ARCLEUNIK = ?', [Photo_Base64, Photo_Name, id]);
+            await pool.execute(`
+        UPDATE fotos
+        SET Photo_Name = ?, Photo_Base64 = ?, Derniere_MAJ = CURDATE()
+        WHERE ARCLEUNIK = ?
+        `, [Photo_Name, Photo_Base64, id]);
         }
         else {
-            // Insérer une nouvelle photo
-            await pool.execute('INSERT INTO fotos (ARCLEUNIK, Photo_Name, Photo_Base64, Derniere_MAJ) VALUES (?, ?, ?, NOW())', [id, Photo_Name, Photo_Base64]);
+            await pool.execute(`
+        INSERT INTO fotos (ARCLEUNIK, Photo_Name, Photo_Base64, Derniere_MAJ)
+        VALUES (?, ?, ?, CURDATE())
+        `, [id, Photo_Name, Photo_Base64]);
         }
         res.status(200).json({
             status: 'ok',
-            message: 'Photo ajoutée avec succès'
+            message: 'Photo enregistrée avec succès',
         });
     }
     catch (error) {
-        console.error('Error adding photo to article:', error);
+        console.error('Erreur addPhotoToArticle:', error);
         res.status(500).json({
             status: 'error',
-            message: 'Failed to add photo to article'
+            message: 'Erreur lors de l’enregistrement de la photo',
         });
     }
 };

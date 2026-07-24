@@ -11,10 +11,67 @@ class CommandesController {
         const result = await databaseService_1.DatabaseService.query('SELECT MAX(BLCLEUNIK) AS maxId FROM bc_lignes');
         return Number(result[0]?.maxId || 0) + 1;
     }
-    // Récupérer toutes les commandes depuis bc_frn
+    static async getFournisseurs(req, res) {
+        try {
+            const fournisseurs = await databaseService_1.DatabaseService.query(`
+        SELECT
+          FRCLEUNIK AS id,
+          Fournis_No AS code,
+          Nom_Societe AS nom,
+          COALESCE(Email_Adresse, '') AS email,
+          COALESCE(Telephone, '') AS telephone,
+          COALESCE(Localite, '') AS ville
+        FROM fournis
+        ORDER BY Nom_Societe ASC
+      `);
+            res.json({
+                success: true,
+                data: fournisseurs,
+                count: fournisseurs.length,
+            });
+        }
+        catch (error) {
+            console.error('Erreur getFournisseurs commandes:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erreur lors de la récupération des fournisseurs',
+            });
+        }
+    }
+    static async getArticlesCommandables(req, res) {
+        try {
+            const articles = await databaseService_1.DatabaseService.query(`
+        SELECT
+          ARCLEUNIK AS id,
+          LIBELLE AS libelle,
+          Code_Barres AS codeBarres,
+          COALESCE(Prix_Achat_HT, 0) AS prixAchatHT,
+          COALESCE(Prix_Achat_TTC, 0) AS prixAchatTTC,
+          COALESCE(Prix_Vente_HT, 0) AS prixVenteHT,
+          TVA_CLEUNIK AS tvaId,
+          FRN_CLEUNIK AS fournisseurId
+        FROM articles
+        WHERE LIBELLE IS NOT NULL
+        ORDER BY LIBELLE ASC
+        LIMIT 2000
+      `);
+            res.json({
+                success: true,
+                data: articles,
+                count: articles.length,
+            });
+        }
+        catch (error) {
+            console.error('Erreur getArticlesCommandables:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erreur lors de la récupération des articles',
+            });
+        }
+    }
     static async getAllCommandes(req, res) {
         try {
-            const query = `
+            const commandes = await databaseService_1.DatabaseService.query(`
         SELECT
           bc.CFCLEUNIK AS id,
           bc.FRCLEUNIK AS idFournisseur,
@@ -29,10 +86,9 @@ class CommandesController {
           bc.Remarques AS notes
         FROM bc_frn bc
         ORDER BY bc.Date_Commande DESC
-      `;
-            const commandes = await databaseService_1.DatabaseService.query(query);
+      `);
             for (const commande of commandes) {
-                const lignesQuery = `
+                const lignes = await databaseService_1.DatabaseService.query(`
           SELECT
             BLCLEUNIK AS id,
             ARCLEUNIK AS idArticle,
@@ -43,38 +99,32 @@ class CommandesController {
             Quantite * Prix_Un AS totalHT,
             Quantite * Prix_Un * (1 + COALESCE(Taux_Tva, 0) / 100) AS totalTTC,
             Nature AS nature,
-            Remise AS remise,
-            Remise_PC AS remisePourcent,
-            Qte_de_boites AS qteDeBoites,
-            Qte_par_boite AS qteParBoite,
             Ligne_no AS ligneNo,
             Code2 AS code2
           FROM bc_lignes
           WHERE CFCLEUNIK = ?
           ORDER BY Ligne_no ASC
-        `;
-                const lignes = await databaseService_1.DatabaseService.query(lignesQuery, [commande.id]);
+          `, [commande.id]);
                 commande.lignes = lignes;
             }
             res.json({
                 success: true,
                 data: commandes,
-                count: commandes.length
+                count: commandes.length,
             });
         }
         catch (error) {
-            console.error('Erreur lors de la récupération des commandes :', error);
+            console.error('Erreur getAllCommandes:', error);
             res.status(500).json({
                 success: false,
-                error: 'Erreur lors de la récupération des commandes'
+                error: 'Erreur lors de la récupération des commandes',
             });
         }
     }
-    // Récupérer une commande par son ID
     static async getCommandeById(req, res) {
         try {
             const { id } = req.params;
-            const query = `
+            const commandes = await databaseService_1.DatabaseService.query(`
         SELECT
           bc.CFCLEUNIK AS id,
           bc.FRCLEUNIK AS idFournisseur,
@@ -89,16 +139,15 @@ class CommandesController {
           bc.Remarques AS notes
         FROM bc_frn bc
         WHERE bc.CFCLEUNIK = ?
-      `;
-            const commandes = await databaseService_1.DatabaseService.query(query, [id]);
+        `, [id]);
             if (commandes.length === 0) {
                 return res.status(404).json({
                     success: false,
-                    error: 'Commande non trouvée'
+                    error: 'Commande non trouvée',
                 });
             }
             const commande = commandes[0];
-            const lignesQuery = `
+            commande.lignes = await databaseService_1.DatabaseService.query(`
         SELECT
           BLCLEUNIK AS id,
           ARCLEUNIK AS idArticle,
@@ -109,80 +158,116 @@ class CommandesController {
           Quantite * Prix_Un AS totalHT,
           Quantite * Prix_Un * (1 + COALESCE(Taux_Tva, 0) / 100) AS totalTTC,
           Nature AS nature,
-          Remise AS remise,
-          Remise_PC AS remisePourcent,
-          Qte_de_boites AS qteDeBoites,
-          Qte_par_boite AS qteParBoite,
           Ligne_no AS ligneNo,
           Code2 AS code2
         FROM bc_lignes
         WHERE CFCLEUNIK = ?
         ORDER BY Ligne_no ASC
-      `;
-            const lignes = await databaseService_1.DatabaseService.query(lignesQuery, [id]);
-            commande.lignes = lignes;
+        `, [id]);
             res.json({
                 success: true,
-                data: commande
+                data: commande,
             });
         }
         catch (error) {
-            console.error('Erreur lors de la récupération de la commande :', error);
+            console.error('Erreur getCommandeById:', error);
             res.status(500).json({
                 success: false,
-                error: 'Erreur lors de la récupération de la commande'
+                error: 'Erreur lors de la récupération de la commande',
             });
         }
     }
-    // Créer une nouvelle commande fournisseur
     static async createCommande(req, res) {
         try {
-            const { idFournisseur, fournisseurCode, nomFournisseur, dateCommande, dateLivraisonPrevue, statut, notes, totalHT, totalTVA, totalTTC, lignes } = req.body;
+            const { idFournisseur, fournisseurCode, nomFournisseur, dateCommande, dateLivraisonPrevue, statut, notes, lignes, } = req.body;
             if (!idFournisseur || !nomFournisseur || !dateCommande) {
                 return res.status(400).json({
                     success: false,
-                    error: 'idFournisseur, nomFournisseur et dateCommande sont requis'
+                    error: 'Fournisseur et date de commande requis',
                 });
             }
             if (!Array.isArray(lignes) || lignes.length === 0) {
                 return res.status(400).json({
                     success: false,
-                    error: 'La commande doit contenir au moins une ligne'
+                    error: 'La commande doit contenir au moins une ligne',
                 });
             }
             const commandeId = await CommandesController.getNextCommandeId();
             let ligneId = await CommandesController.getNextLigneId();
-            await databaseService_1.DatabaseService.query(`INSERT INTO bc_frn (
+            let totalHT = 0;
+            let totalTVA = 0;
+            let totalTTC = 0;
+            for (const ligne of lignes) {
+                const quantite = Number(ligne.quantite || 0);
+                const prixUnitaire = Number(ligne.prixUnitaire || 0);
+                const tauxTVA = Number(ligne.tauxTVA || 21);
+                if (quantite <= 0) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'La quantité doit être supérieure à 0',
+                    });
+                }
+                if (prixUnitaire < 0) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Le prix unitaire ne peut pas être négatif',
+                    });
+                }
+                const ligneHT = quantite * prixUnitaire;
+                const ligneTVA = ligneHT * (tauxTVA / 100);
+                const ligneTTC = ligneHT + ligneTVA;
+                totalHT += ligneHT;
+                totalTVA += ligneTVA;
+                totalTTC += ligneTTC;
+            }
+            const statutValue = typeof statut === 'string' && statut.length > 0
+                ? statut.charAt(0)
+                : 'N';
+            await databaseService_1.DatabaseService.query(`
+        INSERT INTO bc_frn (
           CFCLEUNIK,
           FRCLEUNIK,
           Fournis_No,
           Fournis_Nom,
           Date_Commande,
           Date_Livraison,
+          Total_HT_Brut,
           Total_HT_Net,
+          Total_Brut,
           Total_Tva,
           Total_TTC,
+          Remise_PC,
+          Remise,
           Etat,
+          Type_TVA,
           Remarques,
           Derniere_MAJ
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`, [
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
+        `, [
                 commandeId,
                 idFournisseur,
                 fournisseurCode || null,
                 nomFournisseur,
                 dateCommande,
                 dateLivraisonPrevue || null,
-                totalHT ?? 0,
-                totalTVA ?? 0,
-                totalTTC ?? 0,
-                statut || 'Nouveau',
-                notes || null
+                totalHT,
+                totalHT,
+                totalHT,
+                totalTVA,
+                totalTTC,
+                0,
+                0,
+                statutValue,
+                1,
+                notes || null,
             ]);
-            const insertedLignes = [];
             for (const [index, ligne] of lignes.entries()) {
-                const { idArticle, designation, quantite, prixUnitaire, tauxTVA, nature, remise, remisePourcent, qteDeBoites, qteParBoite, code2 } = ligne;
+                const quantite = Number(ligne.quantite || 0);
+                const prixUnitaire = Number(ligne.prixUnitaire || 0);
+                const tauxTVA = Number(ligne.tauxTVA || 21);
                 const currentLigneId = ligneId++;
-                await databaseService_1.DatabaseService.query(`INSERT INTO bc_lignes (
+                await databaseService_1.DatabaseService.query(`
+          INSERT INTO bc_lignes (
             BLCLEUNIK,
             CCCLEUNIK,
             CFCLEUNIK,
@@ -199,40 +284,26 @@ class CommandesController {
             Ligne_no,
             Code2,
             Derniere_MAJ
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`, [
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
+          `, [
                     currentLigneId,
                     currentLigneId,
                     commandeId,
-                    idArticle || null,
-                    designation || null,
-                    quantite ?? 0,
-                    prixUnitaire ?? 0,
-                    tauxTVA ?? 0,
-                    nature || null,
-                    remise ?? 0,
-                    remisePourcent ?? 0,
-                    qteDeBoites ?? null,
-                    qteParBoite ?? null,
-                    index + 1,
-                    code2 || null
+                    ligne.idArticle || null,
+                    ligne.designation || null,
+                    quantite,
+                    prixUnitaire,
+                    tauxTVA,
+                    'A',
+                    0,
+                    0,
+                    null,
+                    null,
+                    String(index + 1),
+                    ligne.magasinId ? String(ligne.magasinId) : null,
                 ]);
-                insertedLignes.push({
-                    id: currentLigneId,
-                    idArticle: idArticle || null,
-                    designation: designation || null,
-                    quantite: quantite ?? 0,
-                    prixUnitaire: prixUnitaire ?? 0,
-                    tauxTVA: tauxTVA ?? 0,
-                    nature: nature || null,
-                    remise: remise ?? 0,
-                    remisePourcent: remisePourcent ?? 0,
-                    qteDeBoites: qteDeBoites ?? null,
-                    qteParBoite: qteParBoite ?? null,
-                    ligneNo: index + 1,
-                    code2: code2 || null
-                });
             }
-            const createdCommandeQuery = `
+            const createdCommandes = await databaseService_1.DatabaseService.query(`
         SELECT
           bc.CFCLEUNIK AS id,
           bc.FRCLEUNIK AS idFournisseur,
@@ -247,16 +318,9 @@ class CommandesController {
           bc.Remarques AS notes
         FROM bc_frn bc
         WHERE bc.CFCLEUNIK = ?
-      `;
-            const createdCommandes = await databaseService_1.DatabaseService.query(createdCommandeQuery, [commandeId]);
-            const createdCommande = createdCommandes[0] || null;
-            if (!createdCommande) {
-                return res.status(500).json({
-                    success: false,
-                    error: 'Commande créée mais impossible de la récupérer'
-                });
-            }
-            const lignesQuery = `
+        `, [commandeId]);
+            const createdCommande = createdCommandes[0];
+            createdCommande.lignes = await databaseService_1.DatabaseService.query(`
         SELECT
           BLCLEUNIK AS id,
           ARCLEUNIK AS idArticle,
@@ -267,42 +331,290 @@ class CommandesController {
           Quantite * Prix_Un AS totalHT,
           Quantite * Prix_Un * (1 + COALESCE(Taux_Tva, 0) / 100) AS totalTTC,
           Nature AS nature,
-          Remise AS remise,
-          Remise_PC AS remisePourcent,
-          Qte_de_boites AS qteDeBoites,
-          Qte_par_boite AS qteParBoite,
           Ligne_no AS ligneNo,
           Code2 AS code2
         FROM bc_lignes
         WHERE CFCLEUNIK = ?
         ORDER BY Ligne_no ASC
-      `;
-            createdCommande.lignes = await databaseService_1.DatabaseService.query(lignesQuery, [commandeId]);
+        `, [commandeId]);
             res.status(201).json({
                 success: true,
-                data: createdCommande
+                data: createdCommande,
             });
         }
         catch (error) {
-            console.error('Erreur lors de la création de la commande :', error);
+            console.error('Erreur createCommande:', error);
             res.status(500).json({
                 success: false,
-                error: 'Erreur lors de la création de la commande'
+                error: 'Erreur lors de la création de la commande',
+                detail: error instanceof Error ? error.message : 'Erreur inconnue',
             });
         }
     }
-    // Exporter les commandes en CSV
+    static async updateStatutCommande(req, res) {
+        try {
+            const { id } = req.params;
+            const { statut } = req.body;
+            const statutsAutorises = ['N', 'C', 'L', 'R', 'A'];
+            if (!statutsAutorises.includes(statut)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Statut invalide',
+                });
+            }
+            const existing = await databaseService_1.DatabaseService.query(`
+        SELECT Etat
+        FROM bc_frn
+        WHERE CFCLEUNIK = ?
+        LIMIT 1
+        `, [id]);
+            if (existing.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Commande non trouvée',
+                });
+            }
+            const ancienStatut = existing[0].Etat;
+            if (ancienStatut === 'R' && statut !== 'R') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Une commande réceptionnée ne peut plus changer de statut.',
+                });
+            }
+            await databaseService_1.DatabaseService.query(`
+        UPDATE bc_frn
+        SET Etat = ?, Derniere_MAJ = CURDATE()
+        WHERE CFCLEUNIK = ?
+        `, [statut, id]);
+            if (statut === 'R' && ancienStatut !== 'R') {
+                const lignes = await databaseService_1.DatabaseService.query(`
+          SELECT
+            ARCLEUNIK AS articleId,
+            Quantite AS quantite,
+            Code2 AS magasinId
+          FROM bc_lignes
+          WHERE CFCLEUNIK = ?
+            AND ARCLEUNIK IS NOT NULL
+            AND Quantite > 0
+          `, [id]);
+                for (const ligne of lignes) {
+                    const articleId = Number(ligne.articleId);
+                    const quantite = Number(ligne.quantite || 0);
+                    const magasinId = Number(ligne.magasinId || 0);
+                    if (!articleId || quantite <= 0)
+                        continue;
+                    let stockRows = [];
+                    if (magasinId > 0) {
+                        stockRows = await databaseService_1.DatabaseService.query(`
+              SELECT id
+              FROM stock_magasin
+              WHERE article_id = ? AND magasin_id = ?
+              LIMIT 1
+              `, [articleId, magasinId]);
+                    }
+                    if (stockRows.length === 0) {
+                        stockRows = await databaseService_1.DatabaseService.query(`
+              SELECT id
+              FROM stock_magasin
+              WHERE article_id = ?
+              ORDER BY id ASC
+              LIMIT 1
+              `, [articleId]);
+                    }
+                    if (stockRows.length > 0) {
+                        await databaseService_1.DatabaseService.query(`
+              UPDATE stock_magasin
+              SET quantite_stock = quantite_stock + ?
+              WHERE id = ?
+              `, [quantite, stockRows[0].id]);
+                    }
+                }
+            }
+            res.json({
+                success: true,
+                message: statut === 'R'
+                    ? 'Commande réceptionnée et stock mis à jour avec succès'
+                    : 'Statut mis à jour avec succès',
+            });
+        }
+        catch (error) {
+            console.error('Erreur updateStatutCommande:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erreur lors de la mise à jour du statut',
+                detail: error instanceof Error ? error.message : 'Erreur inconnue',
+            });
+        }
+    }
+    static async updateCommande(req, res) {
+        try {
+            const { id } = req.params;
+            const { idFournisseur, fournisseurCode, nomFournisseur, dateCommande, dateLivraisonPrevue, statut, notes, lignes, } = req.body;
+            if (!idFournisseur || !nomFournisseur || !dateCommande) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Fournisseur et date de commande requis',
+                });
+            }
+            if (!Array.isArray(lignes) || lignes.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'La commande doit contenir au moins une ligne',
+                });
+            }
+            const existing = await databaseService_1.DatabaseService.query('SELECT Etat FROM bc_frn WHERE CFCLEUNIK = ?', [id]);
+            if (existing.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Commande non trouvée',
+                });
+            }
+            if (existing[0].Etat === 'R') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Une commande réceptionnée ne peut plus être modifiée',
+                });
+            }
+            let totalHT = 0;
+            let totalTVA = 0;
+            let totalTTC = 0;
+            for (const ligne of lignes) {
+                const quantite = Number(ligne.quantite || 0);
+                const prixUnitaire = Number(ligne.prixUnitaire || 0);
+                const tauxTVA = Number(ligne.tauxTVA || 21);
+                if (quantite <= 0) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'La quantité doit être supérieure à 0',
+                    });
+                }
+                if (prixUnitaire < 0) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Le prix unitaire ne peut pas être négatif',
+                    });
+                }
+                const ligneHT = quantite * prixUnitaire;
+                const ligneTVA = ligneHT * (tauxTVA / 100);
+                const ligneTTC = ligneHT + ligneTVA;
+                totalHT += ligneHT;
+                totalTVA += ligneTVA;
+                totalTTC += ligneTTC;
+            }
+            await databaseService_1.DatabaseService.query(`
+        UPDATE bc_frn
+        SET
+          FRCLEUNIK = ?,
+          Fournis_No = ?,
+          Fournis_Nom = ?,
+          Date_Commande = ?,
+          Date_Livraison = ?,
+          Total_HT_Brut = ?,
+          Total_HT_Net = ?,
+          Total_Brut = ?,
+          Total_Tva = ?,
+          Total_TTC = ?,
+          Etat = ?,
+          Remarques = ?,
+          Derniere_MAJ = CURDATE()
+        WHERE CFCLEUNIK = ?
+        `, [
+                idFournisseur,
+                fournisseurCode || null,
+                nomFournisseur,
+                dateCommande,
+                dateLivraisonPrevue || null,
+                totalHT,
+                totalHT,
+                totalHT,
+                totalTVA,
+                totalTTC,
+                statut || 'N',
+                notes || null,
+                id,
+            ]);
+            await databaseService_1.DatabaseService.query('DELETE FROM bc_lignes WHERE CFCLEUNIK = ?', [
+                id,
+            ]);
+            let ligneId = await CommandesController.getNextLigneId();
+            for (const [index, ligne] of lignes.entries()) {
+                const currentLigneId = ligneId++;
+                await databaseService_1.DatabaseService.query(`
+          INSERT INTO bc_lignes (
+            BLCLEUNIK,
+            CCCLEUNIK,
+            CFCLEUNIK,
+            ARCLEUNIK,
+            LIBELLE,
+            Quantite,
+            Prix_Un,
+            Taux_Tva,
+            Nature,
+            Remise,
+            Remise_PC,
+            Qte_de_boites,
+            Qte_par_boite,
+            Ligne_no,
+            Code2,
+            Derniere_MAJ
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
+          `, [
+                    currentLigneId,
+                    currentLigneId,
+                    id,
+                    ligne.idArticle || null,
+                    ligne.designation || null,
+                    Number(ligne.quantite || 0),
+                    Number(ligne.prixUnitaire || 0),
+                    Number(ligne.tauxTVA || 21),
+                    'A',
+                    0,
+                    0,
+                    null,
+                    null,
+                    String(index + 1),
+                    ligne.magasinId ? String(ligne.magasinId) : null,
+                ]);
+            }
+            res.json({
+                success: true,
+                message: 'Commande modifiée avec succès',
+            });
+        }
+        catch (error) {
+            console.error('Erreur updateCommande:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erreur lors de la modification de la commande',
+                detail: error instanceof Error ? error.message : 'Erreur inconnue',
+            });
+        }
+    }
+    static async deleteCommande(req, res) {
+        try {
+            const { id } = req.params;
+            await databaseService_1.DatabaseService.query('DELETE FROM bc_lignes WHERE CFCLEUNIK = ?', [
+                id,
+            ]);
+            await databaseService_1.DatabaseService.query('DELETE FROM bc_frn WHERE CFCLEUNIK = ?', [
+                id,
+            ]);
+            res.json({
+                success: true,
+                message: 'Commande supprimée avec succès',
+            });
+        }
+        catch (error) {
+            console.error('Erreur deleteCommande:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Erreur lors de la suppression de la commande',
+            });
+        }
+    }
     static async exportCommandesCSV(req, res) {
         try {
-            const { search, statut } = req.query;
-            let whereClause = 'WHERE 1=1';
-            if (search) {
-                whereClause += ` AND (bc.CFCLEUNIK LIKE '%${search}%' OR bc.Fournis_Nom LIKE '%${search}%')`;
-            }
-            if (statut) {
-                whereClause += ` AND bc.Etat = '${statut}'`;
-            }
-            const query = `
+            const commandes = await databaseService_1.DatabaseService.query(`
         SELECT
           bc.CFCLEUNIK AS 'Numéro',
           bc.Fournis_Nom AS 'Fournisseur',
@@ -313,27 +625,27 @@ class CommandesController {
           bc.Total_Tva AS 'Montant TVA',
           bc.Total_TTC AS 'Montant TTC'
         FROM bc_frn bc
-        ${whereClause}
         ORDER BY bc.Date_Commande DESC
-      `;
-            const commandes = await databaseService_1.DatabaseService.query(query);
+      `);
             if (commandes.length === 0) {
                 res.setHeader('Content-Type', 'text/csv; charset=utf-8');
                 res.setHeader('Content-Disposition', `attachment; filename="commandes_${new Date().toISOString().split('T')[0]}.csv"`);
                 return res.send('\uFEFF');
             }
             const csvHeader = Object.keys(commandes[0]).join(';');
-            const csvRows = commandes.map((c) => Object.values(c).join(';'));
-            const csvContent = [csvHeader, ...csvRows].join('\n');
+            const csvRows = commandes.map((row) => Object.values(row)
+                .map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`)
+                .join(';'));
+            const csvContent = '\uFEFF' + [csvHeader, ...csvRows].join('\n');
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="commandes_${new Date().toISOString().split('T')[0]}.csv"`);
-            res.send('\uFEFF' + csvContent);
+            res.send(csvContent);
         }
         catch (error) {
-            console.error("Erreur lors de l'export CSV des commandes :", error);
+            console.error('Erreur exportCommandesCSV:', error);
             res.status(500).json({
                 success: false,
-                error: 'Erreur lors de l\'export CSV'
+                error: "Erreur lors de l'export CSV",
             });
         }
     }

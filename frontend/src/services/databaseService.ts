@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { apiConfig } from '../config/apiConfig';
 
 // Configuration de base pour se connecter aux vraies bases de données
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = apiConfig.baseURL;
 
 // Service pour se connecter aux vraies tables MySQL du cahier des charges
 export class DatabaseService {
@@ -9,71 +10,40 @@ export class DatabaseService {
   // ==================== FOURNISSEURS (FRN) ====================
   static async getFournisseurs() {
     try {
-      console.log('🌐 Appel API vers:', `${API_BASE_URL}/fournisseurs`);
-      
       const response = await axios.get(`${API_BASE_URL}/fournisseurs`);
-      
-      console.log('📥 Réponse API reçue:', response);
-      console.log('📊 Status:', response.status);
-      console.log('📋 Data:', response.data);
-      
       return response.data;
     } catch (error: any) {
-      console.error('❌ Erreur lors de la récupération des fournisseurs:', error);
-      console.error('🔍 Détails de l\'erreur:', error.response || error);
+      console.error('Erreur lors de la récupération des fournisseurs:', error);
       throw error;
     }
   }
 
   static async addFournisseur(fournisseur: any) {
     try {
-      console.log('🌐 Ajout fournisseur API vers:', `${API_BASE_URL}/fournisseurs`);
-      console.log('📋 Données à envoyer:', fournisseur);
-      
       const response = await axios.post(`${API_BASE_URL}/fournisseurs`, fournisseur);
-      
-      console.log('📥 Réponse API reçue:', response);
-      console.log('📊 Status:', response.status);
-      
       return response.data;
     } catch (error: any) {
-      console.error('❌ Erreur lors de l\'ajout du fournisseur:', error);
-      console.error('🔍 Détails de l\'erreur:', error.response || error);
+      console.error('Erreur lors de l\'ajout du fournisseur:', error);
       throw error;
     }
   }
 
   static async updateFournisseur(fournisseur: any) {
     try {
-      console.log('🌐 Mise à jour fournisseur API vers:', `${API_BASE_URL}/fournisseurs/${fournisseur.id}`);
-      console.log('📋 Données à envoyer:', fournisseur);
-      
       const response = await axios.put(`${API_BASE_URL}/fournisseurs/${fournisseur.id}`, fournisseur);
-      
-      console.log('📥 Réponse API reçue:', response);
-      console.log('📊 Status:', response.status);
-      
       return response.data;
     } catch (error: any) {
-      console.error('❌ Erreur lors de la mise à jour du fournisseur:', error);
-      console.error('🔍 Détails de l\'erreur:', error.response || error);
+      console.error('Erreur lors de la mise à jour du fournisseur:', error);
       throw error;
     }
   }
 
   static async deleteFournisseur(id: number) {
     try {
-      console.log('🌐 Suppression fournisseur API vers:', `${API_BASE_URL}/fournisseurs/${id}`);
-      
       const response = await axios.delete(`${API_BASE_URL}/fournisseurs/${id}`);
-      
-      console.log('📥 Réponse API reçue:', response);
-      console.log('📊 Status:', response.status);
-      
       return response.data;
     } catch (error: any) {
-      console.error('❌ Erreur lors de la suppression du fournisseur:', error);
-      console.error('🔍 Détails de l\'erreur:', error.response || error);
+      console.error('Erreur lors de la suppression du fournisseur:', error);
       throw error;
     }
   }

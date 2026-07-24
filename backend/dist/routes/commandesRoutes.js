@@ -3,9 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const commandesController_1 = require("../controllers/commandesController");
 const router = (0, express_1.Router)();
-// Routes pour les commandes (BC_FRN, BC_LINE)
 router.get('/', commandesController_1.CommandesController.getAllCommandes);
-router.post('/', commandesController_1.CommandesController.createCommande);
+router.get('/fournisseurs', commandesController_1.CommandesController.getFournisseurs);
+router.get('/articles', commandesController_1.CommandesController.getArticlesCommandables);
 router.get('/export/csv', commandesController_1.CommandesController.exportCommandesCSV);
+router.post('/', commandesController_1.CommandesController.createCommande);
 router.get('/:id', commandesController_1.CommandesController.getCommandeById);
+router.put('/:id', commandesController_1.CommandesController.updateCommande);
+router.patch('/:id/statut', commandesController_1.CommandesController.updateStatutCommande);
+router.delete('/:id', commandesController_1.CommandesController.deleteCommande);
 exports.default = router;

@@ -5,12 +5,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const crypto_1 = __importDefault(require("crypto"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const authController_1 = require("../controllers/authController");
 const emailController_1 = require("../controllers/emailController");
 const databaseService_1 = require("../services/databaseService");
 const router = (0, express_1.Router)();
 router.post('/login', authController_1.AuthController.login);
 router.get('/verify', authController_1.AuthController.authenticateToken, authController_1.AuthController.verifyToken);
+router.get('/profile', authController_1.AuthController.authenticateToken, authController_1.AuthController.getProfile);
+router.put('/profile', authController_1.AuthController.authenticateToken, authController_1.AuthController.updateProfile);
 router.post('/logout', authController_1.AuthController.logout);
 router.post('/forgot-password', async (req, res) => {
     try {
@@ -66,10 +69,9 @@ router.post('/reset-password', async (req, res) => {
             });
         }
         const rows = await databaseService_1.DatabaseService.query(`
-      SELECT id
+      SELECT id, reset_token_expires
       FROM users
       WHERE reset_token = ?
-      
       LIMIT 1
       `, [token]);
         if (!rows || rows.length === 0) {
@@ -79,13 +81,21 @@ router.post('/reset-password', async (req, res) => {
             });
         }
         const user = rows[0];
+        const expires = new Date(user.reset_token_expires);
+        if (!expires || expires.getTime() < Date.now()) {
+            return res.status(400).json({
+                success: false,
+                message: 'Lien invalide ou expiré',
+            });
+        }
+        const hashedPassword = await bcryptjs_1.default.hash(password, 10);
         await databaseService_1.DatabaseService.update(`
       UPDATE users
       SET Password = ?,
           reset_token = NULL,
           reset_token_expires = NULL
       WHERE id = ?
-      `, [password, user.id]);
+      `, [hashedPassword, user.id]);
         return res.json({
             success: true,
             message: 'Mot de passe modifié avec succès',

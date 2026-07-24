@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import { Permission, ROLE_PERMISSIONS, PERMISSION_MESSAGES } from '../types/permissions';
+import { getRequiredEnvVar } from '../config/env';
 
 // Interface pour étendre Request avec user
 declare global {
@@ -17,6 +19,8 @@ declare global {
   }
 }
 
+const JWT_SECRET = getRequiredEnvVar('JWT_SECRET');
+
 /**
  * Middleware pour vérifier si l'utilisateur est authentifié
  */
@@ -33,8 +37,6 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const jwt = require('jsonwebtoken');
-    const JWT_SECRET = process.env.JWT_SECRET || 'votre-secret-j tres-securise';
     
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;

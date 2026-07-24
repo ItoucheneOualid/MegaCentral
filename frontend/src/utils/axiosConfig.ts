@@ -1,9 +1,10 @@
 import axios from 'axios';
+import { apiConfig } from '../config/apiConfig';
 
-// Créer une instance axios avec configuration par défaut
+// Créer une instance axios avec configuration centralisée
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
-  timeout: 10000,
+  baseURL: apiConfig.baseURL,
+  timeout: apiConfig.timeout,
 });
 
 // Intercepteur pour ajouter le token JWT à toutes les requêtes
@@ -13,13 +14,11 @@ api.interceptors.request.use(
     
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-      console.log('🔑 Token ajouté à la requête:', config.headers.Authorization);
     }
     
     return config;
   },
   (error) => {
-    console.error('❌ Erreur dans l\'intercepteur de requête:', error);
     return Promise.reject(error);
   }
 );
@@ -30,17 +29,10 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error('❌ Erreur de réponse:', error);
-    
     if (error.response?.status === 401) {
-      console.log('🚫 Token expiré ou invalide - Redirection vers login');
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
-    }
-    
-    if (error.response?.status === 403) {
-      console.log('🚫 Permission refusée:', error.response.data);
     }
     
     return Promise.reject(error);

@@ -17,7 +17,7 @@ import {
   Business,
   ArrowBack,
 } from '@mui/icons-material';
-import axios from 'axios';
+import api from '../services/api';
 
 interface LoginResponse {
   success: boolean;
@@ -65,8 +65,9 @@ export const LoginForm: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post<LoginResponse>(
-        'http://localhost:3000/api/auth/login',
+      const { apiConfig } = await import('../config/apiConfig');
+      const response = await api.post<LoginResponse>(
+        apiConfig.endpoints.auth.login,
         credentials
       );
 
@@ -98,8 +99,9 @@ export const LoginForm: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post(
-        'http://localhost:3000/api/auth/forgot-password',
+      const { apiConfig } = await import('../config/apiConfig');
+      const response = await api.post(
+        apiConfig.endpoints.auth.forgotPassword,
         {
           identifier: forgotIdentifier,
         }

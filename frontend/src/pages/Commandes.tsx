@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  alpha,
+  Autocomplete,
   Box,
   Button,
   Card,
   CardContent,
   Chip,
-  Container,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -19,6 +21,7 @@ import {
   MenuItem,
   Paper,
   Select,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -28,6 +31,7 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material';
 import {
   Add,
@@ -35,19 +39,34 @@ import {
   CheckCircle,
   Delete,
   Edit,
+  Euro,
   GetApp,
   LocalShipping,
   Search,
+  ShoppingCart,
+  Store,
   Visibility,
 } from '@mui/icons-material';
-import axios from 'axios';
+import api from '../services/api';
+import { useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { PermissionAlert, usePermissionAlert } from '../components/PermissionAlert';
+import { apiConfig } from '../config/apiConfig';
 
-const API_URL = 'http://localhost:3000/api/commandes';
+const API_URL = apiConfig.endpoints.commandes;
+const MAGASINS_URL = apiConfig.endpoints.magasins;
 
 interface Fournisseur {
   id: number;
   code: string;
   nom: string;
+}
+
+interface Magasin {
+  id: number;
+  nom_magasin?: string;
+  Nom_Magasin?: string;
+  nom?: string;
 }
 
 interface ArticleOption {
@@ -70,6 +89,8 @@ interface LigneCommande {
   tauxTVA?: number;
   totalHT: number;
   totalTTC: number;
+  magasinId?: number | null;
+  magasinNom?: string | null;
 }
 
 interface Commande {
@@ -88,10 +109,33 @@ interface Commande {
   lignes: LigneCommande[];
 }
 
+interface StockNavigationState {
+  fromStock?: boolean;
+  articleId?: number;
+  articleLibelle?: string;
+  magasinId?: number;
+  magasinNom?: string;
+}
+
+const getMagasinName = (magasin?: Magasin | null) => {
+  if (!magasin) return '';
+  return magasin.nom_magasin || magasin.Nom_Magasin || magasin.nom || `Magasin ${magasin.id}`;
+};
+
 const Commandes: React.FC = () => {
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
+  const location = useLocation();
+  const stockState = location.state as StockNavigationState | null;
+
+  const { user } = useAuth();
+  const { alert, showPermissionAlert, closeAlert } = usePermissionAlert();
+  const isAdmin = user?.role === 'admin';
+
   const [commandes, setCommandes] = useState<Commande[]>([]);
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
   const [articles, setArticles] = useState<ArticleOption[]>([]);
+  const [magasins, setMagasins] = useState<Magasin[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -102,24 +146,25 @@ const Commandes: React.FC = () => {
   const [openForm, setOpenForm] = useState(false);
   const [selectedCommande, setSelectedCommande] = useState<Commande | null>(null);
   const [editingCommandeId, setEditingCommandeId] = useState<string | number | null>(null);
+  const [handledStockState, setHandledStockState] = useState(false);
 
   const [form, setForm] = useState({
     idFournisseur: '',
+    magasinId: '',
     dateCommande: new Date().toISOString().split('T')[0],
     dateLivraisonPrevue: '',
     notes: '',
     statut: 'N',
   });
 
-  const [selectedArticleId, setSelectedArticleId] = useState('');
+  const [selectedArticle, setSelectedArticle] = useState<ArticleOption | null>(null);
   const [quantite, setQuantite] = useState(1);
   const [lignes, setLignes] = useState<LigneCommande[]>([]);
 
-  useEffect(() => {
-    fetchCommandes();
-    fetchFournisseurs();
-    fetchArticles();
-  }, []);
+  const livraisonAvantCommande =
+    !!form.dateLivraisonPrevue &&
+    !!form.dateCommande &&
+    form.dateLivraisonPrevue < form.dateCommande;
 
   const formatDate = (date: string) => {
     if (!date) return '';
@@ -127,7 +172,7 @@ const Commandes: React.FC = () => {
   };
 
   const formatEuro = (value: number) =>
-    new Intl.NumberFormat('fr-FR', {
+    new Intl.NumberFormat('fr-BE', {
       style: 'currency',
       currency: 'EUR',
     }).format(Number(value || 0));
@@ -135,7 +180,8 @@ const Commandes: React.FC = () => {
   const fetchCommandes = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(API_URL);
+
+      const response = await api.get(API_URL);
 
       const realData: Commande[] = (response.data.data || []).map((commande: any) => ({
         id: commande.id,
@@ -159,6 +205,8 @@ const Commandes: React.FC = () => {
           tauxTVA: Number(ligne.tauxTVA || 21),
           totalHT: Number(ligne.totalHT || 0),
           totalTTC: Number(ligne.totalTTC || 0),
+          magasinId: ligne.magasinId || null,
+          magasinNom: ligne.magasinNom || null,
         })),
       }));
 
@@ -173,14 +221,80 @@ const Commandes: React.FC = () => {
   };
 
   const fetchFournisseurs = async () => {
-    const response = await axios.get(`${API_URL}/fournisseurs`);
+    const response = await api.get(`${API_URL}/fournisseurs`);
     setFournisseurs(response.data.data || []);
   };
 
   const fetchArticles = async () => {
-    const response = await axios.get(`${API_URL}/articles`);
+    const response = await api.get(`${API_URL}/articles`);
     setArticles(response.data.data || []);
   };
+
+  const fetchMagasins = async () => {
+    const response = await api.get(MAGASINS_URL);
+    setMagasins(response.data.data || response.data || []);
+  };
+
+  useEffect(() => {
+    fetchCommandes();
+    fetchFournisseurs();
+    fetchArticles();
+    fetchMagasins();
+  }, []);
+
+  const resetForm = () => {
+    setForm({
+      idFournisseur: '',
+      magasinId: stockState?.magasinId ? String(stockState.magasinId) : '',
+      dateCommande: new Date().toISOString().split('T')[0],
+      dateLivraisonPrevue: '',
+      notes: '',
+      statut: 'N',
+    });
+
+    setSelectedArticle(null);
+    setQuantite(1);
+    setLignes([]);
+    setEditingCommandeId(null);
+  };
+
+  useEffect(() => {
+    if (!stockState?.fromStock || handledStockState || articles.length === 0) return;
+
+    if (!isAdmin) {
+      showPermissionAlert('Création de commande non autorisée. Cette action nécessite un compte administrateur.');
+      setHandledStockState(true);
+      return;
+    }
+
+    const article = articles.find((a) => String(a.id) === String(stockState.articleId));
+
+    resetForm();
+
+    setForm((prev) => ({
+      ...prev,
+      magasinId: stockState.magasinId ? String(stockState.magasinId) : '',
+      notes: `Réapprovisionnement depuis stock : ${stockState.articleLibelle || article?.libelle || ''}${
+        stockState.magasinNom ? ` - ${stockState.magasinNom}` : ''
+      }`,
+      statut: 'N',
+    }));
+
+    if (article) {
+      setSelectedArticle(article);
+
+      if (article.fournisseurId) {
+        setForm((prev) => ({
+          ...prev,
+          idFournisseur: String(article.fournisseurId),
+        }));
+      }
+    }
+
+    setQuantite(1);
+    setOpenForm(true);
+    setHandledStockState(true);
+  }, [stockState, handledStockState, articles, isAdmin]);
 
   const getStatutLabel = (statut: string) => {
     switch (statut) {
@@ -217,33 +331,29 @@ const Commandes: React.FC = () => {
   };
 
   const totals = useMemo(() => {
-    const montantHT = lignes.reduce((sum, l) => sum + l.totalHT, 0);
-    const montantTTC = lignes.reduce((sum, l) => sum + l.totalTTC, 0);
+    const montantHT = lignes.reduce((sum, ligne) => sum + ligne.totalHT, 0);
+    const montantTTC = lignes.reduce((sum, ligne) => sum + ligne.totalTTC, 0);
     const montantTVA = montantTTC - montantHT;
 
     return { montantHT, montantTVA, montantTTC };
   }, [lignes]);
 
-  const resetForm = () => {
-    setForm({
-      idFournisseur: '',
-      dateCommande: new Date().toISOString().split('T')[0],
-      dateLivraisonPrevue: '',
-      notes: '',
-      statut: 'N',
-    });
-    setSelectedArticleId('');
-    setQuantite(1);
-    setLignes([]);
-    setEditingCommandeId(null);
-  };
-
   const openCreateDialog = () => {
+    if (!isAdmin) {
+      showPermissionAlert('Création de commande non autorisée. Cette action nécessite un compte administrateur.');
+      return;
+    }
+
     resetForm();
     setOpenForm(true);
   };
 
   const openEditDialog = (commande: Commande) => {
+    if (!isAdmin) {
+      showPermissionAlert('Modification de commande non autorisée. Cette action nécessite un compte administrateur.');
+      return;
+    }
+
     if (commande.statut === 'R') {
       setError('Une commande réceptionnée ne peut plus être modifiée.');
       return;
@@ -252,27 +362,42 @@ const Commandes: React.FC = () => {
     setEditingCommandeId(commande.id);
     setForm({
       idFournisseur: String(commande.idFournisseur || ''),
+      magasinId: '',
       dateCommande: commande.dateCommande,
       dateLivraisonPrevue: commande.dateLivraisonPrevue || '',
       notes: commande.notes || '',
       statut: commande.statut || 'N',
     });
+
     setLignes(commande.lignes || []);
+    setSelectedArticle(null);
     setOpenForm(true);
   };
 
   const handleAddLigne = () => {
-    const article = articles.find((a) => String(a.id) === String(selectedArticleId));
+    if (!isAdmin) {
+      showPermissionAlert('Ajout d’article à une commande non autorisé. Cette action nécessite un compte administrateur.');
+      return;
+    }
+
+    if (!form.magasinId) {
+      setError('Veuillez sélectionner le magasin concerné.');
+      return;
+    }
+
+    const article = selectedArticle;
 
     if (!article) {
-      setError('Veuillez sélectionner un article');
+      setError('Veuillez sélectionner un article.');
       return;
     }
 
     if (!quantite || quantite <= 0) {
-      setError('La quantité doit être supérieure à 0');
+      setError('La quantité doit être supérieure à 0.');
       return;
     }
+
+    const magasin = magasins.find((m) => String(m.id) === String(form.magasinId));
 
     const prixUnitaire = Number(article.prixAchatHT || 0);
     const tauxTVA = 21;
@@ -288,27 +413,33 @@ const Commandes: React.FC = () => {
       tauxTVA,
       totalHT,
       totalTTC,
+      magasinId: Number(form.magasinId),
+      magasinNom: getMagasinName(magasin),
     };
 
     setLignes((prev) => [...prev, newLine]);
-    setSelectedArticleId('');
+    setSelectedArticle(null);
     setQuantite(1);
     setError('');
   };
 
   const handleRemoveLigne = (id: string | number) => {
+    if (!isAdmin) {
+      showPermissionAlert('Suppression d’une ligne de commande non autorisée. Cette action nécessite un compte administrateur.');
+      return;
+    }
+
     setLignes((prev) => prev.filter((ligne) => ligne.id !== id));
   };
 
   const buildPayload = () => {
     const fournisseur = fournisseurs.find((f) => String(f.id) === String(form.idFournisseur));
 
-    if (!fournisseur) {
-      throw new Error('Veuillez sélectionner un fournisseur');
-    }
-
-    if (lignes.length === 0) {
-      throw new Error('Veuillez ajouter au moins un article à la commande');
+    if (!fournisseur) throw new Error('Veuillez sélectionner un fournisseur.');
+    if (!form.magasinId) throw new Error('Veuillez sélectionner le magasin concerné.');
+    if (lignes.length === 0) throw new Error('Veuillez ajouter au moins un article à la commande.');
+    if (livraisonAvantCommande) {
+      throw new Error('La date de livraison prévue ne peut pas être antérieure à la date de commande.');
     }
 
     return {
@@ -317,7 +448,7 @@ const Commandes: React.FC = () => {
       nomFournisseur: fournisseur.nom,
       dateCommande: form.dateCommande,
       dateLivraisonPrevue: form.dateLivraisonPrevue || null,
-      statut: form.statut,
+      statut: editingCommandeId ? form.statut : 'N',
       notes: form.notes,
       lignes: lignes.map((ligne) => ({
         idArticle: ligne.idArticle,
@@ -325,11 +456,17 @@ const Commandes: React.FC = () => {
         quantite: ligne.quantite,
         prixUnitaire: ligne.prixUnitaire,
         tauxTVA: ligne.tauxTVA || 21,
+        magasinId: ligne.magasinId || Number(form.magasinId),
       })),
     };
   };
 
   const handleSaveCommande = async () => {
+    if (!isAdmin) {
+      showPermissionAlert('Enregistrement de commande non autorisé. Cette action nécessite un compte administrateur.');
+      return;
+    }
+
     try {
       setSaving(true);
       setError('');
@@ -337,9 +474,9 @@ const Commandes: React.FC = () => {
       const payload = buildPayload();
 
       if (editingCommandeId) {
-        await axios.put(`${API_URL}/${editingCommandeId}`, payload);
+        await api.put(`${API_URL}/${editingCommandeId}`, payload);
       } else {
-        await axios.post(API_URL, payload);
+        await api.post(API_URL, payload);
       }
 
       setOpenForm(false);
@@ -354,8 +491,13 @@ const Commandes: React.FC = () => {
   };
 
   const updateStatut = async (commande: Commande, statut: string) => {
+    if (!isAdmin) {
+      showPermissionAlert('Modification du statut non autorisée. Cette action nécessite un compte administrateur.');
+      return;
+    }
+
     try {
-      await axios.patch(`${API_URL}/${commande.id}/statut`, { statut });
+      await api.patch(`${API_URL}/${commande.id}/statut`, { statut });
       await fetchCommandes();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Erreur lors de la modification du statut');
@@ -363,10 +505,15 @@ const Commandes: React.FC = () => {
   };
 
   const handleDeleteCommande = async (commande: Commande) => {
+    if (!isAdmin) {
+      showPermissionAlert('Suppression de commande non autorisée. Cette action nécessite un compte administrateur.');
+      return;
+    }
+
     if (!window.confirm(`Supprimer la commande ${commande.numero} ?`)) return;
 
     try {
-      await axios.delete(`${API_URL}/${commande.id}`);
+      await api.delete(`${API_URL}/${commande.id}`);
       await fetchCommandes();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Erreur lors de la suppression de la commande');
@@ -382,240 +529,268 @@ const Commandes: React.FC = () => {
     window.open(`${API_URL}/export/csv`, '_blank');
   };
 
-  const filteredCommandes = commandes.filter((commande) =>
-    commande.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    commande.nomFournisseur.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    getStatutLabel(commande.statut).toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredCommandes = commandes.filter(
+    (commande) =>
+      commande.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      commande.nomFournisseur.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      getStatutLabel(commande.statut).toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const totalTTC = commandes.reduce((sum, commande) => sum + commande.montantTTC, 0);
+  const commandesReceptionnees = commandes.filter((commande) => commande.statut === 'R').length;
+  const commandesEnAttente = commandes.filter((commande) => commande.statut === 'N').length;
+
+  const statCards = [
+    {
+      label: 'Commandes',
+      value: commandes.length,
+      description: 'Fournisseurs',
+      color: '#2563eb',
+      icon: <ShoppingCart fontSize="small" />,
+    },
+    {
+      label: 'Montant total',
+      value: formatEuro(totalTTC),
+      description: 'Total TTC',
+      color: '#16a34a',
+      icon: <Euro fontSize="small" />,
+    },
+    {
+      label: 'Réceptionnées',
+      value: commandesReceptionnees,
+      description: 'Terminées',
+      color: '#f97316',
+      icon: <CheckCircle fontSize="small" />,
+    },
+    {
+      label: 'En attente',
+      value: commandesEnAttente,
+      description: 'À traiter',
+      color: '#7c3aed',
+      icon: <LocalShipping fontSize="small" />,
+    },
+  ];
 
   if (loading) {
     return (
-      <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Typography>Chargement des commandes...</Typography>
+      <Box
+        sx={{
+          minHeight: '45vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: isDarkMode
+            ? 'linear-gradient(135deg, #07111f 0%, #0f172a 100%)'
+            : 'linear-gradient(135deg, #eef4ff 0%, #f8fafc 45%, #ffffff 100%)',
+        }}
+      >
+        <CircularProgress size={48} />
       </Box>
     );
   }
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3, gap: 2, flexWrap: 'wrap' }}>
-        <Box>
-          <Typography variant="h4" fontWeight="600">
-            Gestion des Commandes Fournisseurs
-          </Typography>
-          <Typography color="text.secondary">
-            Création, modification, suivi et réception des commandes fournisseurs
-          </Typography>
-        </Box>
+    <Box
+      sx={{
+        p: { xs: 1.5, md: 2 },
+        minHeight: '100vh',
+        background: isDarkMode
+          ? 'linear-gradient(135deg, #07111f 0%, #0f172a 100%)'
+          : 'linear-gradient(135deg, #eef4ff 0%, #f8fafc 45%, #ffffff 100%)',
+      }}
+    >
+      <Box
+        sx={{
+          mb: 2,
+          p: { xs: 2, md: 2.5 },
+          borderRadius: 3.5,
+          background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #0f172a 100%)',
+          color: '#fff',
+        }}
+      >
+        <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <LocalShipping sx={{ fontSize: 32 }} />
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button variant="outlined" startIcon={<GetApp />} onClick={handleExportCSV}>
-            Exporter CSV
-          </Button>
+            <Box>
+              <Typography variant="h5" fontWeight={950}>
+                Gestion des commandes fournisseurs
+              </Typography>
 
-          <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog}>
-            Ajouter commande
-          </Button>
-        </Box>
+              <Typography sx={{ color: 'rgba(255,255,255,0.75)', fontWeight: 600, fontSize: '0.85rem' }}>
+                Création, suivi, réception et approvisionnements fournisseurs
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<GetApp />}
+              onClick={handleExportCSV}
+              sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.45)', fontWeight: 900 }}
+            >
+              Exporter CSV
+            </Button>
+
+            <Tooltip title={isAdmin ? 'Ajouter une commande' : 'Action réservée à l’administrateur'}>
+              <span>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<Add />}
+                  onClick={openCreateDialog}
+                  disabled={!isAdmin}
+                  sx={{ bgcolor: '#fff', color: '#1d4ed8', fontWeight: 900 }}
+                >
+                  Ajouter commande
+                </Button>
+              </span>
+            </Tooltip>
+          </Stack>
+        </Stack>
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2.5 }} onClose={() => setError('')}>
           {error}
         </Alert>
       )}
 
-      <Card>
+      {stockState?.fromStock && (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2.5 }}>
+          Commande ouverte depuis le stock pour : <strong>{stockState.articleLibelle}</strong>
+          {stockState.magasinNom ? ` — ${stockState.magasinNom}` : ''}
+        </Alert>
+      )}
+
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        {statCards.map((stat) => (
+          <Grid item xs={12} sm={6} md={3} key={stat.label}>
+            <Card sx={{ height: '100%', borderRadius: 3, bgcolor: isDarkMode ? '#0f172a' : '#ffffff' }}>
+              <CardContent sx={{ p: 1.8, '&:last-child': { pb: 1.8 } }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Box>
+                    <Typography color="text.secondary" fontWeight={800} fontSize="0.78rem">
+                      {stat.label}
+                    </Typography>
+
+                    <Typography variant="h6" fontWeight={950} sx={{ color: stat.color, mt: 0.2 }}>
+                      {stat.value}
+                    </Typography>
+
+                    <Typography color="text.secondary" fontSize="0.78rem">
+                      {stat.description}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ color: stat.color }}>{stat.icon}</Box>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      <Card sx={{ mb: 2, borderRadius: 3 }}>
         <CardContent>
           <TextField
             fullWidth
+            size="small"
             placeholder="Rechercher par numéro, fournisseur ou statut..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            sx={{ mb: 3 }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <Search />
+                  <Search fontSize="small" />
                 </InputAdornment>
               ),
             }}
           />
-
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Numéro</TableCell>
-                  <TableCell>Fournisseur</TableCell>
-                  <TableCell>Date commande</TableCell>
-                  <TableCell>Livraison prévue</TableCell>
-                  <TableCell>Statut</TableCell>
-                  <TableCell align="right">Total TTC</TableCell>
-                  <TableCell align="center">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-
-              <TableBody>
-                {filteredCommandes.map((commande) => (
-                  <TableRow key={commande.id}>
-                    <TableCell>{commande.numero}</TableCell>
-
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <LocalShipping fontSize="small" />
-                        {commande.nomFournisseur}
-                      </Box>
-                    </TableCell>
-
-                    <TableCell>{commande.dateCommande}</TableCell>
-                    <TableCell>{commande.dateLivraisonPrevue || '-'}</TableCell>
-
-                    <TableCell>
-                      <Chip
-                        label={getStatutLabel(commande.statut)}
-                        color={getStatutColor(commande.statut) as any}
-                        size="small"
-                      />
-                    </TableCell>
-
-                    <TableCell align="right">
-                      <strong>{formatEuro(commande.montantTTC)}</strong>
-                    </TableCell>
-
-                    <TableCell align="center">
-                      <Tooltip title="Voir détails">
-                        <IconButton onClick={() => handleVoirDetails(commande)}>
-                          <Visibility />
-                        </IconButton>
-                      </Tooltip>
-
-                      <Tooltip title="Modifier">
-                        <span>
-                          <IconButton
-                            color="primary"
-                            onClick={() => openEditDialog(commande)}
-                            disabled={commande.statut === 'R'}
-                          >
-                            <Edit />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-
-                      <Tooltip title="Confirmer">
-                        <IconButton color="info" onClick={() => updateStatut(commande, 'C')}>
-                          <CheckCircle />
-                        </IconButton>
-                      </Tooltip>
-
-                      <Tooltip title="En livraison">
-                        <IconButton color="secondary" onClick={() => updateStatut(commande, 'L')}>
-                          <LocalShipping />
-                        </IconButton>
-                      </Tooltip>
-
-                      <Tooltip title="Réceptionnée">
-                        <IconButton color="success" onClick={() => updateStatut(commande, 'R')}>
-                          <CheckCircle />
-                        </IconButton>
-                      </Tooltip>
-
-                      <Tooltip title="Annuler">
-                        <IconButton color="warning" onClick={() => updateStatut(commande, 'A')}>
-                          <Cancel />
-                        </IconButton>
-                      </Tooltip>
-
-                      <Tooltip title="Supprimer">
-                        <IconButton color="error" onClick={() => handleDeleteCommande(commande)}>
-                          <Delete />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))}
-
-                {filteredCommandes.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center">
-                      Aucune commande trouvée
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
         </CardContent>
       </Card>
 
-      <Dialog open={openDetails} onClose={() => setOpenDetails(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Détails de la commande {selectedCommande?.numero}</DialogTitle>
+      <Card sx={{ borderRadius: 3, overflow: 'hidden' }}>
+        <TableContainer component={Paper} elevation={0} sx={{ maxHeight: 'calc(100vh - 330px)' }}>
+          <Table stickyHeader size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Numéro</TableCell>
+                <TableCell>Fournisseur</TableCell>
+                <TableCell>Date commande</TableCell>
+                <TableCell>Livraison prévue</TableCell>
+                <TableCell>Statut</TableCell>
+                <TableCell align="right">Total TTC</TableCell>
+                <TableCell align="center">Actions</TableCell>
+              </TableRow>
+            </TableHead>
 
-        <DialogContent dividers>
-          {selectedCommande && (
-            <>
-              <Typography><strong>Fournisseur :</strong> {selectedCommande.nomFournisseur}</Typography>
-              <Typography><strong>Date commande :</strong> {selectedCommande.dateCommande}</Typography>
-              <Typography><strong>Livraison prévue :</strong> {selectedCommande.dateLivraisonPrevue || '-'}</Typography>
-              <Typography><strong>Statut :</strong> {getStatutLabel(selectedCommande.statut)}</Typography>
-              <Typography><strong>Notes :</strong> {selectedCommande.notes || 'Aucune note'}</Typography>
+            <TableBody>
+              {filteredCommandes.map((commande) => (
+                <TableRow key={commande.id} hover>
+                  <TableCell>
+                    <Chip label={commande.numero} variant="outlined" color="primary" size="small" />
+                  </TableCell>
 
-              <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>
-                Articles commandés
-              </Typography>
+                  <TableCell>{commande.nomFournisseur}</TableCell>
+                  <TableCell>{commande.dateCommande}</TableCell>
+                  <TableCell>{commande.dateLivraisonPrevue || '-'}</TableCell>
 
-              <TableContainer component={Paper}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Article</TableCell>
-                      <TableCell align="right">Quantité</TableCell>
-                      <TableCell align="right">Prix unitaire</TableCell>
-                      <TableCell align="right">Total HT</TableCell>
-                      <TableCell align="right">Total TTC</TableCell>
-                    </TableRow>
-                  </TableHead>
+                  <TableCell>
+                    <Chip label={getStatutLabel(commande.statut)} color={getStatutColor(commande.statut) as any} size="small" />
+                  </TableCell>
 
-                  <TableBody>
-                    {selectedCommande.lignes.map((ligne) => (
-                      <TableRow key={ligne.id}>
-                        <TableCell>{ligne.designation}</TableCell>
-                        <TableCell align="right">{ligne.quantite}</TableCell>
-                        <TableCell align="right">{formatEuro(ligne.prixUnitaire)}</TableCell>
-                        <TableCell align="right">{formatEuro(ligne.totalHT)}</TableCell>
-                        <TableCell align="right">{formatEuro(ligne.totalTTC)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                  <TableCell align="right">{formatEuro(commande.montantTTC)}</TableCell>
 
-              <Box sx={{ mt: 3, textAlign: 'right' }}>
-                <Typography>Total HT : {formatEuro(selectedCommande.montantHT)}</Typography>
-                <Typography>TVA : {formatEuro(selectedCommande.montantTVA)}</Typography>
-                <Typography variant="h6">
-                  Total TTC : {formatEuro(selectedCommande.montantTTC)}
-                </Typography>
-              </Box>
-            </>
-          )}
-        </DialogContent>
+                  <TableCell align="center">
+                    <Stack direction="row" justifyContent="center" spacing={0.4}>
+                      <IconButton size="small" onClick={() => handleVoirDetails(commande)}>
+                        <Visibility fontSize="small" />
+                      </IconButton>
 
-        <DialogActions>
-          <Button onClick={() => setOpenDetails(false)}>Fermer</Button>
-        </DialogActions>
-      </Dialog>
+                      <IconButton size="small" color="primary" onClick={() => openEditDialog(commande)} disabled={!isAdmin || commande.statut === 'R'}>
+                        <Edit fontSize="small" />
+                      </IconButton>
+
+                      <IconButton size="small" color="info" onClick={() => updateStatut(commande, 'C')} disabled={!isAdmin}>
+                        <CheckCircle fontSize="small" />
+                      </IconButton>
+
+                      <IconButton size="small" color="secondary" onClick={() => updateStatut(commande, 'L')} disabled={!isAdmin}>
+                        <LocalShipping fontSize="small" />
+                      </IconButton>
+
+                      <IconButton size="small" color="success" onClick={() => updateStatut(commande, 'R')} disabled={!isAdmin}>
+                        <CheckCircle fontSize="small" />
+                      </IconButton>
+
+                      <IconButton size="small" color="warning" onClick={() => updateStatut(commande, 'A')} disabled={!isAdmin}>
+                        <Cancel fontSize="small" />
+                      </IconButton>
+
+                      <IconButton size="small" color="error" onClick={() => handleDeleteCommande(commande)} disabled={!isAdmin}>
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Card>
 
       <Dialog open={openForm} onClose={() => setOpenForm(false)} maxWidth="md" fullWidth>
-        <DialogTitle>
-          {editingCommandeId ? 'Modifier la commande fournisseur' : 'Nouvelle commande fournisseur'}
-        </DialogTitle>
+        <DialogTitle>{editingCommandeId ? 'Modifier la commande fournisseur' : 'Nouvelle commande fournisseur'}</DialogTitle>
 
         <DialogContent dividers>
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
+          <Grid container spacing={1.7}>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth size="small">
                 <InputLabel>Fournisseur</InputLabel>
+
                 <Select
                   label="Fournisseur"
                   value={form.idFournisseur}
@@ -630,9 +805,28 @@ const Commandes: React.FC = () => {
               </FormControl>
             </Grid>
 
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Magasin concerné</InputLabel>
+
+                <Select
+                  label="Magasin concerné"
+                  value={form.magasinId}
+                  onChange={(e) => setForm({ ...form, magasinId: String(e.target.value) })}
+                >
+                  {magasins.map((magasin) => (
+                    <MenuItem key={magasin.id} value={String(magasin.id)}>
+                      {getMagasinName(magasin)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
+                size="small"
                 type="date"
                 label="Date commande"
                 value={form.dateCommande}
@@ -641,37 +835,35 @@ const Commandes: React.FC = () => {
               />
             </Grid>
 
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
+                size="small"
                 type="date"
                 label="Livraison prévue"
                 value={form.dateLivraisonPrevue}
                 onChange={(e) => setForm({ ...form, dateLivraisonPrevue: e.target.value })}
                 InputLabelProps={{ shrink: true }}
+                inputProps={{ min: form.dateCommande }}
+                error={livraisonAvantCommande}
+                helperText={livraisonAvantCommande ? 'Date invalide' : ''}
               />
             </Grid>
 
             <Grid item xs={12} md={4}>
-              <FormControl fullWidth>
-                <InputLabel>Statut</InputLabel>
-                <Select
-                  label="Statut"
-                  value={form.statut}
-                  onChange={(e) => setForm({ ...form, statut: String(e.target.value) })}
-                >
-                  <MenuItem value="N">En attente</MenuItem>
-                  <MenuItem value="C">Confirmée</MenuItem>
-                  <MenuItem value="L">En livraison</MenuItem>
-                  <MenuItem value="R">Réceptionnée</MenuItem>
-                  <MenuItem value="A">Annulée</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} md={8}>
               <TextField
                 fullWidth
+                size="small"
+                label="Statut"
+                value={editingCommandeId ? getStatutLabel(form.statut) : 'En attente'}
+                disabled
+              />
+            </Grid>
+
+            <Grid item xs={12} md={4}>
+              <TextField
+                fullWidth
+                size="small"
                 label="Notes"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -679,101 +871,117 @@ const Commandes: React.FC = () => {
             </Grid>
 
             <Grid item xs={12}>
-              <Typography variant="h6" sx={{ mt: 2 }}>
+              <Typography variant="subtitle1" fontWeight={950}>
                 Articles de la commande
               </Typography>
             </Grid>
 
-            <Grid item xs={12} md={7}>
-              <FormControl fullWidth>
-                <InputLabel>Article</InputLabel>
-                <Select
-                  label="Article"
-                  value={selectedArticleId}
-                  onChange={(e) => setSelectedArticleId(String(e.target.value))}
-                >
-                  {articles.map((article) => (
-                    <MenuItem key={article.id} value={String(article.id)}>
-                      {article.libelle} — {formatEuro(article.prixAchatHT)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+            <Grid item xs={12} md={9}>
+              <Autocomplete
+                size="small"
+                options={articles}
+                value={selectedArticle}
+                onChange={(_event, newValue) => setSelectedArticle(newValue)}
+                getOptionLabel={(option) =>
+                  `${option.libelle || ''}${option.codeBarres ? ` — ${option.codeBarres}` : ''}`
+                }
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                filterOptions={(options, { inputValue }) => {
+                  const search = inputValue.toLowerCase().trim();
 
-            <Grid item xs={12} md={3}>
-              <TextField
-  fullWidth
-  type="number"
-  label="Quantité"
-  value={quantite}
-  onChange={(e) => {
-    const value = Number(e.target.value);
-
-    if (value >= 0) {
-      setQuantite(value);
-    }
-  }}
-  inputProps={{
-    min: 0,
-    step: 1,
-  }}
-/>
+                  return options
+                    .filter((option) => {
+                      return (
+                        option.libelle?.toLowerCase().includes(search) ||
+                        option.codeBarres?.toLowerCase().includes(search)
+                      );
+                    })
+                    .slice(0, 100);
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Rechercher et sélectionner un article"
+                    placeholder="Nom ou code-barres..."
+                  />
+                )}
+                renderOption={(props, option) => (
+                  <li {...props} key={option.id}>
+                    {option.libelle} — {formatEuro(option.prixAchatHT)}
+                    {option.codeBarres ? ` — ${option.codeBarres}` : ''}
+                  </li>
+                )}
+              />
             </Grid>
 
             <Grid item xs={12} md={2}>
-              <Button fullWidth variant="contained" onClick={handleAddLigne} sx={{ height: '56px' }}>
-                Ajouter
+              <TextField
+                fullWidth
+                size="small"
+                type="number"
+                label="Quantité"
+                value={quantite}
+                onChange={(e) => setQuantite(Number(e.target.value))}
+                inputProps={{ min: 1 }}
+              />
+            </Grid>
+
+            <Grid item xs={12} md={1}>
+              <Button fullWidth variant="contained" size="small" onClick={handleAddLigne} sx={{ height: 40 }}>
+                +
               </Button>
             </Grid>
 
             <Grid item xs={12}>
-              <TableContainer component={Paper}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Article</TableCell>
-                      <TableCell align="right">Quantité</TableCell>
-                      <TableCell align="right">Prix HT</TableCell>
-                      <TableCell align="right">Total HT</TableCell>
-                      <TableCell align="right">Total TTC</TableCell>
-                      <TableCell align="center">Action</TableCell>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Article</TableCell>
+                    <TableCell align="right">Quantité</TableCell>
+                    <TableCell align="right">Prix HT</TableCell>
+                    <TableCell align="right">Total HT</TableCell>
+                    <TableCell align="right">Total TTC</TableCell>
+                    <TableCell align="center">Action</TableCell>
+                  </TableRow>
+                </TableHead>
+
+                <TableBody>
+                  {lignes.map((ligne) => (
+                    <TableRow key={ligne.id}>
+                      <TableCell>
+                        {ligne.designation}
+                        {ligne.magasinNom && (
+                          <Chip
+                            size="small"
+                            label={`Stock : ${ligne.magasinNom}`}
+                            color="primary"
+                            variant="outlined"
+                            sx={{ ml: 1 }}
+                          />
+                        )}
+                      </TableCell>
+
+                      <TableCell align="right">{ligne.quantite}</TableCell>
+                      <TableCell align="right">{formatEuro(ligne.prixUnitaire)}</TableCell>
+                      <TableCell align="right">{formatEuro(ligne.totalHT)}</TableCell>
+                      <TableCell align="right">{formatEuro(ligne.totalTTC)}</TableCell>
+
+                      <TableCell align="center">
+                        <IconButton size="small" color="error" onClick={() => handleRemoveLigne(ligne.id)}>
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </TableCell>
                     </TableRow>
-                  </TableHead>
-
-                  <TableBody>
-                    {lignes.map((ligne) => (
-                      <TableRow key={ligne.id}>
-                        <TableCell>{ligne.designation}</TableCell>
-                        <TableCell align="right">{ligne.quantite}</TableCell>
-                        <TableCell align="right">{formatEuro(ligne.prixUnitaire)}</TableCell>
-                        <TableCell align="right">{formatEuro(ligne.totalHT)}</TableCell>
-                        <TableCell align="right">{formatEuro(ligne.totalTTC)}</TableCell>
-                        <TableCell align="center">
-                          <IconButton color="error" onClick={() => handleRemoveLigne(ligne.id)}>
-                            <Delete />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-
-                    {lignes.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={6} align="center">
-                          Aucun article ajouté
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                  ))}
+                </TableBody>
+              </Table>
             </Grid>
 
             <Grid item xs={12}>
-              <Box sx={{ textAlign: 'right', mt: 2 }}>
+              <Box sx={{ textAlign: 'right' }}>
                 <Typography>Total HT : {formatEuro(totals.montantHT)}</Typography>
                 <Typography>TVA : {formatEuro(totals.montantTVA)}</Typography>
-                <Typography variant="h6">Total TTC : {formatEuro(totals.montantTTC)}</Typography>
+                <Typography fontWeight={950}>Total TTC : {formatEuro(totals.montantTTC)}</Typography>
               </Box>
             </Grid>
           </Grid>
@@ -781,13 +989,57 @@ const Commandes: React.FC = () => {
 
         <DialogActions>
           <Button onClick={() => setOpenForm(false)}>Annuler</Button>
-          <Button variant="contained" onClick={handleSaveCommande} disabled={saving}>
-            {editingCommandeId ? 'Modifier la commande' : 'Enregistrer la commande'}
+
+          <Button variant="contained" onClick={handleSaveCommande} disabled={saving || livraisonAvantCommande}>
+            {saving ? 'Enregistrement...' : 'Enregistrer'}
           </Button>
         </DialogActions>
       </Dialog>
-    </Container>
+
+      <Dialog open={openDetails} onClose={() => setOpenDetails(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Détails de la commande {selectedCommande?.numero}</DialogTitle>
+
+        <DialogContent dividers>
+          {selectedCommande && (
+            <>
+              <Typography>
+                <strong>Fournisseur :</strong> {selectedCommande.nomFournisseur}
+              </Typography>
+
+              <Table size="small" sx={{ mt: 2 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Article</TableCell>
+                    <TableCell align="right">Quantité</TableCell>
+                    <TableCell align="right">Prix HT</TableCell>
+                    <TableCell align="right">Total TTC</TableCell>
+                  </TableRow>
+                </TableHead>
+
+                <TableBody>
+                  {selectedCommande.lignes.map((ligne) => (
+                    <TableRow key={ligne.id}>
+                      <TableCell>{ligne.designation}</TableCell>
+                      <TableCell align="right">{ligne.quantite}</TableCell>
+                      <TableCell align="right">{formatEuro(ligne.prixUnitaire)}</TableCell>
+                      <TableCell align="right">{formatEuro(ligne.totalTTC)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
+          )}
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setOpenDetails(false)}>Fermer</Button>
+        </DialogActions>
+      </Dialog>
+
+      <PermissionAlert message={alert.message} open={alert.open} onClose={closeAlert} />
+    </Box>
   );
 };
 
 export { Commandes };
+export default Commandes;
