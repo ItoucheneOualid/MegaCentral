@@ -55,16 +55,7 @@ Thumbs.db
 *.zip
 *.tar.gz
 *.rar
-node_modules
-node_modules
-node_modules
-node_modules
-node_modules
-node_modules
-node_modules
-node_modules
-node_modules
-node_modules
-node_modules
-node_modules
-node_modules
+
+# Local-only generated folders
+/backend/db_backups/
+/frontend/frontend/
