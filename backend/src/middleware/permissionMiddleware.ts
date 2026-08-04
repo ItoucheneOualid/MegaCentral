@@ -12,6 +12,7 @@ declare global {
     interface Request {
       user?: {
         id: number;
+        userId: number;
         login: string;
         role: string;
         nom: string;
@@ -48,7 +49,7 @@ export const authenticateToken = (
 
     if (
       typeof decoded === "string" ||
-      typeof decoded.id !== "number" ||
+      typeof decoded.userId !== "number" ||
       typeof decoded.login !== "string" ||
       typeof decoded.role !== "string"
     ) {
@@ -60,7 +61,8 @@ export const authenticateToken = (
     }
 
     req.user = {
-      id: decoded.id,
+      id: decoded.userId,
+      userId: decoded.userId,
       login: decoded.login,
       role: decoded.role,
       nom: typeof decoded.nom === "string" ? decoded.nom : "",
