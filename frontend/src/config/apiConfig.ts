@@ -3,26 +3,37 @@
  * Centralized API URL configuration for all frontend services
  */
 
-const rawApiUrl = (process.env.REACT_APP_API_URL || 'http://localhost:3000/api').trim();
+const rawApiUrl = (
+  process.env.REACT_APP_API_URL ||
+  'http://localhost:3000/api'
+).trim();
 
-// Accept both forms for REACT_APP_API_URL:
+const normalizedApiUrl = rawApiUrl.replace(/\/+$/, '');
+
+// Accepte les deux formats :
 // - http://localhost:3000
 // - http://localhost:3000/api
-const API_BASE_URL = rawApiUrl.replace(/\/+$/, '').endsWith('/api')
-  ? rawApiUrl.replace(/\/+$/, '')
-  : `${rawApiUrl.replace(/\/+$/, '')}/api`;
+const API_BASE_URL = normalizedApiUrl.endsWith('/api')
+  ? normalizedApiUrl
+  : `${normalizedApiUrl}/api`;
 
 export const apiConfig = {
   baseURL: API_BASE_URL,
   timeout: 10000,
+
   endpoints: {
     auth: {
       login: `${API_BASE_URL}/auth/login`,
       logout: `${API_BASE_URL}/auth/logout`,
-      verifyToken: `${API_BASE_URL}/auth/verify-token`,
+
+      // Correspond à router.get('/verify') dans le backend
+      verifyToken: `${API_BASE_URL}/auth/verify`,
+
       resetPassword: `${API_BASE_URL}/auth/reset-password`,
       forgotPassword: `${API_BASE_URL}/auth/forgot-password`,
+      profile: `${API_BASE_URL}/auth/profile`,
     },
+
     articles: `${API_BASE_URL}/articles`,
     familles: `${API_BASE_URL}/familles`,
     fournisseurs: `${API_BASE_URL}/fournisseurs`,

@@ -1,5 +1,12 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from 'react-router-dom';
+
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, Box } from '@mui/material';
 
@@ -17,29 +24,85 @@ import Stock from './pages/Stock';
 import Profile from './pages/Profile';
 import { Login } from './pages/Login';
 
-import { AuthProvider } from './contexts/AuthContext';
+import {
+  AuthProvider,
+  useAuth,
+} from './contexts/AuthContext';
+
 import { AuthGuard } from './components/AuthGuard';
 import { TranslationProvider } from './contexts/TranslationContext';
 
 const lightTheme = createTheme({
   palette: {
     mode: 'light',
-    primary: { main: '#1976d2', light: '#42a5f5', dark: '#1565c0' },
-    secondary: { main: '#f57c00', light: '#ffb74d', dark: '#ef6c00' },
-    background: { default: '#f5f5f5', paper: '#ffffff' },
-    text: { primary: '#212121', secondary: '#757575' },
+    primary: {
+      main: '#1976d2',
+      light: '#42a5f5',
+      dark: '#1565c0',
+    },
+    secondary: {
+      main: '#f57c00',
+      light: '#ffb74d',
+      dark: '#ef6c00',
+    },
+    background: {
+      default: '#f5f5f5',
+      paper: '#ffffff',
+    },
+    text: {
+      primary: '#212121',
+      secondary: '#757575',
+    },
   },
 });
 
 const darkTheme = createTheme({
   palette: {
     mode: 'dark',
-    primary: { main: '#0066ff', light: '#4d94ff', dark: '#0052cc' },
-    secondary: { main: '#ff6b35', light: '#ff9558', dark: '#cc5522' },
-    background: { default: '#1a1a1a', paper: '#2a2a2a' },
-    text: { primary: '#ffffff', secondary: '#e0e0e0' },
+    primary: {
+      main: '#0066ff',
+      light: '#4d94ff',
+      dark: '#0052cc',
+    },
+    secondary: {
+      main: '#ff6b35',
+      light: '#ff9558',
+      dark: '#cc5522',
+    },
+    background: {
+      default: '#1a1a1a',
+      paper: '#2a2a2a',
+    },
+    text: {
+      primary: '#ffffff',
+      secondary: '#e0e0e0',
+    },
   },
 });
+
+interface PublicOnlyRouteProps {
+  children: React.ReactNode;
+}
+
+/**
+ * Empêche un utilisateur déjà connecté de revenir
+ * sur la page de connexion.
+ */
+const PublicOnlyRoute: React.FC<PublicOnlyRouteProps> = ({
+  children,
+}) => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return null;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+};
 
 function App() {
   return (
@@ -55,14 +118,20 @@ function App() {
 
 const AppContent: React.FC = () => {
   const location = useLocation();
+  const { isAuthenticated, isLoading } = useAuth();
+
   const savedTheme = localStorage.getItem('theme');
   const [darkMode, setDarkMode] = useState(savedTheme === 'dark');
 
   const theme = darkMode ? darkTheme : lightTheme;
-  const isHomePage = location.pathname === '/';
-  const isLoginPage = location.pathname === '/login' || location.pathname === '/reset-password';
 
-  React.useEffect(() => {
+  const isHomePage = location.pathname === '/';
+
+  const isPublicPage =
+    location.pathname === '/login' ||
+    location.pathname === '/reset-password';
+
+  useEffect(() => {
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
@@ -70,14 +139,34 @@ const AppContent: React.FC = () => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
 
-      {!isLoginPage && (
-        <Navbar darkMode={darkMode} setDarkMode={setDarkMode} />
+      {!isLoading && isAuthenticated && !isPublicPage && (
+        <Navbar
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+        />
       )}
 
-      <Box component="main" sx={{ flexGrow: 1, p: isHomePage || isLoginPage ? 0 : 3 }}>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: isHomePage || isPublicPage ? 0 : 3,
+        }}
+      >
         <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route
+            path="/login"
+            element={
+              <PublicOnlyRoute>
+                <Login />
+              </PublicOnlyRoute>
+            }
+          />
+
+          <Route
+            path="/reset-password"
+            element={<ResetPassword />}
+          />
 
           <Route
             path="/"
@@ -166,6 +255,16 @@ const AppContent: React.FC = () => {
               <AuthGuard>
                 <Profile />
               </AuthGuard>
+            }
+          />
+
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to={isAuthenticated ? '/dashboard' : '/login'}
+                replace
+              />
             }
           />
         </Routes>
