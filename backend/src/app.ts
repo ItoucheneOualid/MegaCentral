@@ -28,7 +28,7 @@ app.use(helmet());
 
 // Dynamically configure CORS based on environment
 const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? (process.env.ALLOWED_ORIGINS || '').split(',').map(origin => origin.trim())
+  ? (process.env.ALLOWED_ORIGINS || '').split(',').map(origin => origin.trim()).filter(Boolean)
   : [
       'http://localhost:3001',
       'http://localhost:3000',
@@ -37,7 +37,7 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
     ];
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: allowedOrigins.length > 0 ? allowedOrigins : true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT','PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
