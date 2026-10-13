@@ -7,7 +7,7 @@ const getPhotoByArticleId = async (req, res) => {
         const { id } = req.params;
         const pool = (0, db_1.getPool)();
         const [rows] = await pool.execute(`
-      SELECT IDFOTO, ARCLEUNIK, Photo_Name, Photo_Base64
+      SELECT ARCLEUNIK, Photo_Name, Photo_Base64
       FROM fotos
       WHERE ARCLEUNIK = ?
       LIMIT 1
@@ -46,7 +46,7 @@ const addPhotoToArticle = async (req, res) => {
             return;
         }
         const pool = (0, db_1.getPool)();
-        const [existingPhotos] = await pool.execute('SELECT IDFOTO FROM fotos WHERE ARCLEUNIK = ? LIMIT 1', [id]);
+        const [existingPhotos] = await pool.execute('SELECT ARCLEUNIK FROM fotos WHERE ARCLEUNIK = ? LIMIT 1', [id]);
         if (Array.isArray(existingPhotos) && existingPhotos.length > 0) {
             await pool.execute(`
         UPDATE fotos

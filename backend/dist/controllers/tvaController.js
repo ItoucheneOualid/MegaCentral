@@ -7,13 +7,12 @@ class TvaController {
     static async getAllTva(req, res) {
         try {
             const query = `
-        SELECT * FROM TVA
+        SELECT TVA_ID, Taux, Description, Derniere_MAJ
+        FROM TVA
+        ORDER BY Taux ASC
       `;
-            console.log('🔍 Requête SQL TVA:', query);
             const result = await databaseService_1.DatabaseService.query(query);
-            // S'assurer que c'est bien un tableau
             const tvaData = Array.isArray(result) ? result : [];
-            console.log(`✅ TVA trouvées: ${tvaData.length}`);
             res.json({
                 status: 'ok',
                 data: tvaData,
@@ -33,15 +32,9 @@ class TvaController {
         try {
             const { id } = req.params;
             const query = `
-        SELECT 
-          id as id,
-          libelle,
-          taux,
-          actif,
-          created_at as createdAt,
-          updated_at as updatedAt
-        FROM TVA 
-        WHERE id = ?
+        SELECT TVA_ID, Taux, Description, Derniere_MAJ
+        FROM TVA
+        WHERE TVA_ID = ?
       `;
             const result = await databaseService_1.DatabaseService.query(query, [id]);
             const tvaData = Array.isArray(result) ? result : [];
@@ -64,19 +57,13 @@ class TvaController {
             });
         }
     }
-    // Récupérer uniquement les TVA actives
+    // Récupérer tous les taux de TVA (la table `tva` MegaCaisse ne porte pas de champ "actif")
     static async getActiveTva(req, res) {
         try {
             const query = `
-        SELECT 
-          id as id,
-          libelle,
-          taux,
-          created_at as createdAt,
-          updated_at as updatedAt
-        FROM TVA 
-        WHERE actif = TRUE
-        ORDER BY taux ASC
+        SELECT TVA_ID, Taux, Description, Derniere_MAJ
+        FROM TVA
+        ORDER BY Taux ASC
       `;
             const result = await databaseService_1.DatabaseService.query(query);
             const tvaData = Array.isArray(result) ? result : [];
@@ -97,27 +84,24 @@ class TvaController {
     // Exporter les TVA en CSV
     static async exportTvaCSV(req, res) {
         try {
-            const { search, actif } = req.query;
+            const { search } = req.query;
             let whereClause = 'WHERE 1=1';
+            const params = [];
             if (search) {
-                whereClause += ` AND (libelle LIKE '%${search}%' OR taux LIKE '%${search}%')`;
-            }
-            if (actif !== undefined) {
-                whereClause += ` AND actif = ${actif === 'true' ? 1 : 0}`;
+                whereClause += ' AND (Description LIKE ? OR Taux LIKE ?)';
+                params.push(`%${search}%`, `%${search}%`);
             }
             const query = `
-        SELECT 
-          id as 'ID',
-          libelle as 'Libellé',
-          taux as 'Taux (%)',
-          CASE WHEN actif = 1 THEN 'Oui' ELSE 'Non' END as 'Actif',
-          DATE_FORMAT(created_at, '%d/%m/%Y %H:%i') as 'Date Création',
-          DATE_FORMAT(updated_at, '%d/%m/%Y %H:%i') as 'Date Mise à Jour'
-        FROM TVA 
+        SELECT
+          TVA_ID as 'ID',
+          Description as 'Description',
+          Taux as 'Taux (%)',
+          DATE_FORMAT(Derniere_MAJ, '%d/%m/%Y') as 'Dernière MAJ'
+        FROM TVA
         ${whereClause}
-        ORDER BY taux ASC
+        ORDER BY Taux ASC
       `;
-            const result = await databaseService_1.DatabaseService.query(query);
+            const result = await databaseService_1.DatabaseService.query(query, params);
             const tvaData = Array.isArray(result) ? result : [];
             if (tvaData.length === 0) {
                 return res.status(404).json({
@@ -125,7 +109,6 @@ class TvaController {
                     error: 'Aucune TVA trouvée'
                 });
             }
-            // Créer le contenu CSV
             const csvHeader = Object.keys(tvaData[0] || {}).join(';');
             const csvRows = tvaData.map((t) => Object.values(t).join(';'));
             const csvContent = [csvHeader, ...csvRows].join('\n');
@@ -151,19 +134,18 @@ class TvaController {
                     error: 'Montant HT et ID TVA sont requis'
                 });
             }
-            // Récupérer le taux de TVA
             const tvaQuery = `
-        SELECT taux FROM TVA WHERE id = ? AND actif = TRUE
+        SELECT Taux FROM TVA WHERE TVA_ID = ?
       `;
             const result = await databaseService_1.DatabaseService.query(tvaQuery, [idTva]);
             const tvaData = Array.isArray(result) ? result : [];
             if (tvaData.length === 0) {
                 return res.status(404).json({
                     success: false,
-                    error: 'TVA non trouvée ou inactive'
+                    error: 'TVA non trouvée'
                 });
             }
-            const taux = tvaData[0].taux;
+            const taux = tvaData[0].Taux;
             const montantTVA = montantHT * (taux / 100);
             const montantTTC = montantHT + montantTVA;
             res.json({

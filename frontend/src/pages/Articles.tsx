@@ -51,6 +51,7 @@ import { useTranslation } from '../contexts/TranslationContext';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/axiosConfig';
 import { PermissionAlert, usePermissionAlert } from '../components/PermissionAlert';
+import { normalizeArray, normalizeArticle } from '../utils/megaCaisseDisplay';
 
 interface Article {
   ARCLEUNIK: number;
@@ -249,7 +250,8 @@ const Articles: React.FC = () => {
 
   const fetchArticles = async () => {
     const response = await api.get('/articles');
-    setArticles(response.data.data || response.data || []);
+    const rows = normalizeArray<any>(response.data).map(normalizeArticle);
+    setArticles(rows);
   };
 
   const fetchFamilles = async () => {

@@ -25,7 +25,7 @@ SELECT
 FROM articles a
 LEFT JOIN familles1 f1 ON a.F1_Cleunik = f1.F1cleunik
 LEFT JOIN familles2 f2 ON a.F2_CLEUNIK = f2.F2CLEUNIK
-LEFT JOIN tva t ON a.TVA_CLEUNIK = t.TVA_ID
+LEFT JOIN TVA t ON a.TVA_CLEUNIK = t.TVA_ID
 LEFT JOIN fournis fo ON a.FRN_CLEUNIK = fo.FRCLEUNIK
 LEFT JOIN fotos p ON a.ARCLEUNIK = p.ARCLEUNIK
 `;
@@ -137,7 +137,7 @@ const createArticle = async (req, res) => {
         F2_CLEUNIK,
         TVA_CLEUNIK,
         FRN_CLEUNIK,
-        Date_Modifiée
+        \`Date_Modifiée\`
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`, [
             nextId,
             String(LIBELLE).trim(),
@@ -218,7 +218,7 @@ const updateArticle = async (req, res) => {
         F2_CLEUNIK = ?,
         TVA_CLEUNIK = ?,
         FRN_CLEUNIK = ?,
-        Date_Modifiée = NOW()
+        \`Date_Modifiée\` = NOW()
       WHERE ARCLEUNIK = ?`, [
             String(LIBELLE).trim(),
             Code_Barres || null,
@@ -274,8 +274,6 @@ const deleteArticle = async (req, res) => {
         }
         // Supprimer d'abord les données liées à l'article
         await pool.execute('DELETE FROM fotos WHERE ARCLEUNIK = ?', [id]);
-        await pool.execute('DELETE FROM stock_magasin WHERE article_id = ?', [id]);
-        await pool.execute('DELETE FROM mouvements_stock WHERE article_id = ?', [id]);
         // Puis supprimer l'article
         const [result] = await pool.execute('DELETE FROM articles WHERE ARCLEUNIK = ?', [id]);
         if (result.affectedRows === 0) {

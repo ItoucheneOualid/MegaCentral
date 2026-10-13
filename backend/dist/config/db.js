@@ -6,19 +6,27 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.testConnection = exports.getPool = void 0;
 const promise_1 = __importDefault(require("mysql2/promise"));
 const dotenv_1 = __importDefault(require("dotenv"));
+const env_1 = require("./env");
 dotenv_1.default.config();
+const DB_SSL_ENABLED = (0, env_1.getOptionalEnvVar)("DB_SSL", "false").toLowerCase() === "true";
 const DB_CONFIG = {
-    host: process.env.DB_HOST || "localhost",
-    port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "Walid@19960",
-    database: process.env.DB_NAME || "idmegacentral",
+    host: (0, env_1.getOptionalEnvVar)("DB_HOST", "localhost"),
+    port: Number((0, env_1.getOptionalEnvVar)("DB_PORT", "3306")),
+    user: (0, env_1.getOptionalEnvVar)("DB_USER", "root"),
+    password: (0, env_1.getRequiredEnvVar)("DB_PASSWORD"),
+    database: (0, env_1.getRequiredEnvVar)("DB_NAME"),
+    ssl: DB_SSL_ENABLED
+        ? {
+            ca: (0, env_1.getRequiredEnvVar)("DB_CA_CERT").replace(/\\n/g, "\n"),
+            rejectUnauthorized: true,
+        }
+        : undefined,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
     connectTimeout: 10000,
     idleTimeout: 60000,
-    enableKeepAlive: true
+    enableKeepAlive: true,
 };
 let pool = null;
 const getPool = () => {
@@ -36,12 +44,12 @@ const testConnection = async () => {
         return true;
     }
     catch (error) {
-        console.error('❌ Database connection failed:', error);
+        console.error("❌ Database connection failed:", error);
         return false;
     }
     finally {
         if (connection) {
-            await connection.release();
+            connection.release();
         }
     }
 };

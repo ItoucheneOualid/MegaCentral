@@ -4,14 +4,14 @@ import { DatabaseService } from '../services/databaseService';
 export class CommandesController {
   private static async getNextCommandeId(): Promise<number> {
     const result = await DatabaseService.query(
-      'SELECT MAX(CFCLEUNIK) AS maxId FROM bc_frn'
+      'SELECT MAX(CFCLEUNIK) AS maxId FROM BC_FRN'
     );
     return Number(result[0]?.maxId || 0) + 1;
   }
 
   private static async getNextLigneId(): Promise<number> {
     const result = await DatabaseService.query(
-      'SELECT MAX(BLCLEUNIK) AS maxId FROM bc_lignes'
+      'SELECT MAX(BLCLEUNIK) AS maxId FROM BC_Lignes'
     );
     return Number(result[0]?.maxId || 0) + 1;
   }
@@ -91,7 +91,7 @@ export class CommandesController {
           bc.Total_Tva AS montantTVA,
           bc.Total_TTC AS montantTTC,
           bc.Remarques AS notes
-        FROM bc_frn bc
+        FROM BC_FRN bc
         ORDER BY bc.Date_Commande DESC
       `);
 
@@ -110,7 +110,7 @@ export class CommandesController {
             Nature AS nature,
             Ligne_no AS ligneNo,
             Code2 AS code2
-          FROM bc_lignes
+          FROM BC_Lignes
           WHERE CFCLEUNIK = ?
           ORDER BY Ligne_no ASC
           `,
@@ -152,7 +152,7 @@ export class CommandesController {
           bc.Total_Tva AS montantTVA,
           bc.Total_TTC AS montantTTC,
           bc.Remarques AS notes
-        FROM bc_frn bc
+        FROM BC_FRN bc
         WHERE bc.CFCLEUNIK = ?
         `,
         [id]
@@ -181,7 +181,7 @@ export class CommandesController {
           Nature AS nature,
           Ligne_no AS ligneNo,
           Code2 AS code2
-        FROM bc_lignes
+        FROM BC_Lignes
         WHERE CFCLEUNIK = ?
         ORDER BY Ligne_no ASC
         `,
@@ -270,7 +270,7 @@ export class CommandesController {
 
       await DatabaseService.query(
         `
-        INSERT INTO bc_frn (
+        INSERT INTO BC_FRN (
           CFCLEUNIK,
           FRCLEUNIK,
           Fournis_No,
@@ -318,7 +318,7 @@ export class CommandesController {
 
         await DatabaseService.query(
           `
-          INSERT INTO bc_lignes (
+          INSERT INTO BC_Lignes (
             BLCLEUNIK,
             CCCLEUNIK,
             CFCLEUNIK,
@@ -371,7 +371,7 @@ export class CommandesController {
           bc.Total_Tva AS montantTVA,
           bc.Total_TTC AS montantTTC,
           bc.Remarques AS notes
-        FROM bc_frn bc
+        FROM BC_FRN bc
         WHERE bc.CFCLEUNIK = ?
         `,
         [commandeId]
@@ -393,7 +393,7 @@ export class CommandesController {
           Nature AS nature,
           Ligne_no AS ligneNo,
           Code2 AS code2
-        FROM bc_lignes
+        FROM BC_Lignes
         WHERE CFCLEUNIK = ?
         ORDER BY Ligne_no ASC
         `,
@@ -431,7 +431,7 @@ export class CommandesController {
       const existing = await DatabaseService.query(
         `
         SELECT Etat
-        FROM bc_frn
+        FROM BC_FRN
         WHERE CFCLEUNIK = ?
         LIMIT 1
         `,
@@ -456,80 +456,18 @@ export class CommandesController {
 
       await DatabaseService.query(
         `
-        UPDATE bc_frn
+        UPDATE BC_FRN
         SET Etat = ?, Derniere_MAJ = CURDATE()
         WHERE CFCLEUNIK = ?
         `,
         [statut, id]
       );
 
-      if (statut === 'R' && ancienStatut !== 'R') {
-        const lignes = await DatabaseService.query(
-          `
-          SELECT
-            ARCLEUNIK AS articleId,
-            Quantite AS quantite,
-            Code2 AS magasinId
-          FROM bc_lignes
-          WHERE CFCLEUNIK = ?
-            AND ARCLEUNIK IS NOT NULL
-            AND Quantite > 0
-          `,
-          [id]
-        );
-
-        for (const ligne of lignes) {
-          const articleId = Number(ligne.articleId);
-          const quantite = Number(ligne.quantite || 0);
-          const magasinId = Number(ligne.magasinId || 0);
-
-          if (!articleId || quantite <= 0) continue;
-
-          let stockRows = [];
-
-          if (magasinId > 0) {
-            stockRows = await DatabaseService.query(
-              `
-              SELECT id
-              FROM stock_magasin
-              WHERE article_id = ? AND magasin_id = ?
-              LIMIT 1
-              `,
-              [articleId, magasinId]
-            );
-          }
-
-          if (stockRows.length === 0) {
-            stockRows = await DatabaseService.query(
-              `
-              SELECT id
-              FROM stock_magasin
-              WHERE article_id = ?
-              ORDER BY id ASC
-              LIMIT 1
-              `,
-              [articleId]
-            );
-          }
-
-          if (stockRows.length > 0) {
-            await DatabaseService.query(
-              `
-              UPDATE stock_magasin
-              SET quantite_stock = quantite_stock + ?
-              WHERE id = ?
-              `,
-              [quantite, stockRows[0].id]
-            );
-          }
-        }
-      }
-
       res.json({
         success: true,
         message:
           statut === 'R'
-            ? 'Commande réceptionnée et stock mis à jour avec succès'
+            ? 'Commande réceptionnée. Le schéma MegaCaisse ne stocke pas les quantités disponibles par magasin ; le stock n’a pas été modifié.'
             : 'Statut mis à jour avec succès',
       });
     } catch (error) {
@@ -571,7 +509,7 @@ export class CommandesController {
       }
 
       const existing = await DatabaseService.query(
-        'SELECT Etat FROM bc_frn WHERE CFCLEUNIK = ?',
+        'SELECT Etat FROM BC_FRN WHERE CFCLEUNIK = ?',
         [id]
       );
 
@@ -623,7 +561,7 @@ export class CommandesController {
 
       await DatabaseService.query(
         `
-        UPDATE bc_frn
+        UPDATE BC_FRN
         SET
           FRCLEUNIK = ?,
           Fournis_No = ?,
@@ -657,7 +595,7 @@ export class CommandesController {
         ]
       );
 
-      await DatabaseService.query('DELETE FROM bc_lignes WHERE CFCLEUNIK = ?', [
+      await DatabaseService.query('DELETE FROM BC_Lignes WHERE CFCLEUNIK = ?', [
         id,
       ]);
 
@@ -668,7 +606,7 @@ export class CommandesController {
 
         await DatabaseService.query(
           `
-          INSERT INTO bc_lignes (
+          INSERT INTO BC_Lignes (
             BLCLEUNIK,
             CCCLEUNIK,
             CFCLEUNIK,
@@ -725,11 +663,11 @@ export class CommandesController {
     try {
       const { id } = req.params;
 
-      await DatabaseService.query('DELETE FROM bc_lignes WHERE CFCLEUNIK = ?', [
+      await DatabaseService.query('DELETE FROM BC_Lignes WHERE CFCLEUNIK = ?', [
         id,
       ]);
 
-      await DatabaseService.query('DELETE FROM bc_frn WHERE CFCLEUNIK = ?', [
+      await DatabaseService.query('DELETE FROM BC_FRN WHERE CFCLEUNIK = ?', [
         id,
       ]);
 
@@ -758,7 +696,7 @@ export class CommandesController {
           bc.Total_HT_Net AS 'Montant HT',
           bc.Total_Tva AS 'Montant TVA',
           bc.Total_TTC AS 'Montant TTC'
-        FROM bc_frn bc
+        FROM BC_FRN bc
         ORDER BY bc.Date_Commande DESC
       `);
 

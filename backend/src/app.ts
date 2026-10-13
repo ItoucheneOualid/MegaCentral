@@ -18,6 +18,8 @@ import emailRoutes from './routes/email.routes';
 import photosRoutes from './routes/photos.routes';
 import stockMagasinRoutes from './routes/stockMagasinRoutes';
 import mouvementsStockRoutes from './routes/mouvementsStockRoutes';
+import megaCaisseSyncRoutes from './routes/megaCaisseSyncRoutes';
+import { authenticateMegaCaisse } from './middleware/apiKeyMiddleware';
 
 import { DatabaseService } from './services/databaseService';
 import { getOptionalEnvVar } from './config/env';
@@ -40,10 +42,17 @@ app.use(cors({
   origin: allowedOrigins.length > 0 ? allowedOrigins : true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT','PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
   preflightContinue: false,
   optionsSuccessStatus: 200
 }));
+
+app.use(
+  '/api/sync/megacaisse',
+  authenticateMegaCaisse,
+  express.json({ limit: '50mb' }),
+  megaCaisseSyncRoutes
+);
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));

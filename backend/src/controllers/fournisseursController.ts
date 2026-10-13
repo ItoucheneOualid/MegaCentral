@@ -135,7 +135,7 @@ export class FournisseursController {
         WHERE FRCLEUNIK = ?
       `;
       
-      const [fournisseur] = await DatabaseService.query(query, [id]);
+      const fournisseur = await DatabaseService.query(query, [id]);
       
       if (fournisseur.length === 0) {
         return res.status(404).json({

@@ -44,7 +44,7 @@ export const getTickets = async (req: Request, res: Response): Promise<void> => 
       SELECT 
         Numero,
         Date,
-        Time,
+        \`Time\`,
         Total_TTC,
         Total_HT,
         Total_Tva,
@@ -62,7 +62,7 @@ export const getTickets = async (req: Request, res: Response): Promise<void> => 
         END as has_pdf
       FROM tickets
       ${whereClause}
-      ORDER BY Date DESC, Time DESC
+      ORDER BY Date DESC, \`Time\` DESC
     `;
 
     const [rows] = await pool.execute<TicketRow[]>(query, params);
@@ -109,7 +109,7 @@ export const getTicketById = async (req: Request, res: Response): Promise<void> 
       SELECT 
         Numero,
         Date,
-        Time,
+        \`Time\`,
         Total_TTC,
         Total_HT,
         Total_Tva,
@@ -397,5 +397,94 @@ export const generateAndSaveTicketPDF = async (req: Request, res: Response): Pro
       status: 'error',
       message: 'Erreur lors de la génération du ticket'
     });
+  }
+};
+
+// Colonnes acceptées lors de l'import (PDF_Base64 est géré séparément, jamais via l'import de masse)
+const TICKET_IMPORT_COLUMNS = [
+  'Numero', 'Date', 'Time', 'Total_TTC', 'Total_HT', 'Total_Tva', 'Caisse',
+  'CACLEUNIK', 'Client_No', 'Client_Nom', 'Nature', 'Etat', 'Code_Magasin',
+  'Type', 'Total_Brut', 'Remise_PC', 'Remise_EnPC', 'Paiements', 'Solde',
+  'Benefice', 'SECLEUNIK', 'Echeance', 'Action_Type', 'Remarques',
+  'Points_total', 'Montant_CC', 'CC_used', 'Ticket_Facturée', 'Montant_Acompte',
+  'Code_Carte', 'Time_end', 'Paiement1', 'Paiement2', 'Paiement3', 'Paiement4',
+  'Paiement5', 'Paiement6', 'Paiement7', 'ExtraField1', 'ExtraField2',
+  'Montant_Credit', 'Montant_BA'
+] as const;
+
+const MAX_TICKETS_PER_IMPORT = 500;
+
+// Import en masse des tickets envoyés par MegaCaisse (fin de journée)
+export const importTickets = async (req: Request, res: Response): Promise<void> => {
+  const tickets = req.body?.tickets;
+
+  if (!Array.isArray(tickets) || tickets.length === 0) {
+    res.status(400).json({
+      status: 'error',
+      message: 'Le champ "tickets" doit être un tableau non vide'
+    });
+    return;
+  }
+
+  if (tickets.length > MAX_TICKETS_PER_IMPORT) {
+    res.status(400).json({
+      status: 'error',
+      message: `Trop de tickets dans une seule requête (max ${MAX_TICKETS_PER_IMPORT})`
+    });
+    return;
+  }
+
+  for (const ticket of tickets) {
+    if (!ticket || typeof ticket.Numero !== 'string' || ticket.Numero.trim() === '') {
+      res.status(400).json({
+        status: 'error',
+        message: 'Chaque ticket doit posséder un champ "Numero" valide'
+      });
+      return;
+    }
+  }
+
+  const pool = getPool();
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const updateClause = TICKET_IMPORT_COLUMNS
+      .filter((col) => col !== 'Numero')
+      .map((col) => `\`${col}\` = VALUES(\`${col}\`)`)
+      .join(', ');
+
+    // PDF_Base64 est NOT NULL en base (sans défaut) : on l'initialise à '' à l'insertion
+    // uniquement, sans jamais l'écraser lors d'une mise à jour (voir ON DUPLICATE KEY).
+    const insertQuery = `
+      INSERT INTO tickets (${TICKET_IMPORT_COLUMNS.map((c) => `\`${c}\``).join(', ')}, \`PDF_Base64\`)
+      VALUES (${TICKET_IMPORT_COLUMNS.map(() => '?').join(', ')}, '')
+      ON DUPLICATE KEY UPDATE ${updateClause}
+    `;
+
+    for (const ticket of tickets) {
+      const values = TICKET_IMPORT_COLUMNS.map((col) =>
+        ticket[col] !== undefined ? ticket[col] : null
+      );
+      await connection.execute(insertQuery, values);
+    }
+
+    await connection.commit();
+
+    res.status(200).json({
+      status: 'ok',
+      message: `${tickets.length} ticket(s) importé(s) avec succès`,
+      count: tickets.length
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Erreur lors de l\'import des tickets:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Échec de l\'import des tickets'
+    });
+  } finally {
+    connection.release();
   }
 };

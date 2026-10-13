@@ -127,7 +127,7 @@ class FournisseursController {
         FROM fournis 
         WHERE FRCLEUNIK = ?
       `;
-            const [fournisseur] = await databaseService_1.default.query(query, [id]);
+            const fournisseur = await databaseService_1.default.query(query, [id]);
             if (fournisseur.length === 0) {
                 return res.status(404).json({
                     success: false,

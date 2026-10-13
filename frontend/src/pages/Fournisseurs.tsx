@@ -48,6 +48,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/axiosConfig';
 import { PermissionAlert, usePermissionAlert } from '../components/PermissionAlert';
+import { normalizeArray, pickValue } from '../utils/megaCaisseDisplay';
 
 interface Fournisseur {
   id: number;
@@ -151,7 +152,20 @@ const Fournisseurs: React.FC = () => {
     try {
       setLoading(true);
       const response = await api.get('/fournisseurs');
-      setFournisseurs(response.data || []);
+      const rows = normalizeArray<any>(response.data).map((supplier: any) => ({
+        id: Number(pickValue(supplier, ['FRCLEUNIK', 'id', 'ID']) ?? 0),
+        code: String(pickValue(supplier, ['Fournis_No', 'code', 'Code']) ?? ''),
+        nom: String(pickValue(supplier, ['Nom_Societe', 'nom', 'Nom']) ?? ''),
+        adresse: String(pickValue(supplier, ['Adresse1', 'adresse', 'Adresse']) ?? ''),
+        telephone: String(pickValue(supplier, ['Telephone', 'telephone', 'Tel']) ?? ''),
+        email: String(pickValue(supplier, ['Email_Adresse', 'email', 'Email']) ?? ''),
+        ville: String(pickValue(supplier, ['Localite', 'ville', 'Ville']) ?? ''),
+        codePostal: String(pickValue(supplier, ['Code_Postal', 'codePostal', 'CP']) ?? ''),
+        pays: String(pickValue(supplier, ['Pays_Nom', 'pays', 'Pays']) ?? ''),
+        statut: String(pickValue(supplier, ['statut', 'Statut']) ?? 'actif'),
+        dateCreation: String(pickValue(supplier, ['Date_Entree', 'dateCreation', 'Date']) ?? ''),
+      }));
+      setFournisseurs(rows);
       setError(null);
     } catch (err: any) {
       if (err.response?.status === 403 && err.response?.data?.message) {

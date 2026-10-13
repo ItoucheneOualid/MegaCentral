@@ -106,6 +106,7 @@ const Stock: React.FC = () => {
   const [magasins, setMagasins] = useState<Magasin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [stockUnavailable, setStockUnavailable] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [magasinFilter, setMagasinFilter] = useState('');
@@ -128,6 +129,7 @@ const Stock: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      setStockUnavailable(false);
 
       const params = new URLSearchParams();
 
@@ -148,7 +150,13 @@ const Stock: React.FC = () => {
       setTotalRows(response.data.total ?? filteredData.length);
     } catch (err: any) {
       console.error('Erreur stocks:', err);
-      setError(err.response?.data?.message || err.response?.data?.error || 'Erreur lors du chargement des stocks');
+      if (err.response?.data?.code === 'STORE_STOCK_NOT_IN_SCHEMA') {
+        setStocks([]);
+        setTotalRows(0);
+        setStockUnavailable(true);
+      } else {
+        setError(err.response?.data?.message || err.response?.data?.error || 'Erreur lors du chargement des stocks');
+      }
     } finally {
       setLoading(false);
     }
@@ -315,6 +323,20 @@ const statCards = [
         <Typography variant="subtitle1" sx={{ ml: 2 }}>
           Chargement des stocks disponibles...
         </Typography>
+      </Box>
+    );
+  }
+
+  if (stockUnavailable) {
+    return (
+      <Box sx={{ p: { xs: 2, md: 4 } }}>
+        <Typography variant="h4" fontWeight={800} sx={{ mb: 2 }}>
+          Gestion des stocks
+        </Typography>
+        <Alert severity="info">
+          La structure MegaCaisse ne contient pas les quantités de stock disponibles par article et par magasin.
+          Cette page restera indisponible tant que ces données ne seront pas fournies par MegaCaisse.
+        </Alert>
       </Box>
     );
   }

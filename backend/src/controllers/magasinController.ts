@@ -1,131 +1,63 @@
 import { Request, Response } from 'express';
+import { DatabaseService } from '../services/databaseService';
 
 export class MagasinController {
-  // Récupérer les magasins (version simplifiée sans base de données)
-  static async getMagasinsFromDb(req: Request, res: Response) {
+  static async getMagasinsFromDb(_req: Request, res: Response) {
     try {
-      // Données fixes pour éviter les erreurs de connexion
-      const magasins = [
-        {
-          id: 1,
-          code_magasin: '1',
-          nom_magasin: 'Anderlue',
-          derniere_maj: '2024-02-10'
-        },
-        {
-          id: 2,
-          code_magasin: '2',
-          nom_magasin: 'Epinois',
-          derniere_maj: '2024-02-10'
-        },
-        {
-          id: 3,
-          code_magasin: '3',
-          nom_magasin: 'La Louvière',
-          derniere_maj: '2024-02-10'
-        }
-      ];
-      
-      // Log unique au démarrage
-      if (req.query.debug === 'true') {
-        console.log('Magasins retournés (version simplifiée):', magasins);
-      }
-      
-      res.json({
-        status: 'ok',
-        data: magasins,
-        count: magasins.length
-      });
+      const magasins = await DatabaseService.query(`
+        SELECT
+          id,
+          Code_Magasin AS code_magasin,
+          Nom_Magasin AS nom_magasin,
+          Derniere_MAJ AS derniere_maj
+        FROM Magasin
+        ORDER BY Nom_Magasin
+      `);
+
+      res.json({ status: 'ok', data: magasins, count: magasins.length });
     } catch (error) {
       console.error('Erreur lors de la récupération des magasins:', error);
       res.status(500).json({
         status: 'error',
-        message: 'Erreur lors de la récupération des magasins'
+        message: 'Erreur lors de la récupération des magasins',
       });
     }
   }
 
-  // Récupérer les magasins depuis les utilisateurs actifs (fallback)
-  static async getMagasinsFromUsers(req: Request, res: Response) {
-    try {
-      // Solution directe : toujours retourner les magasins par défaut
-      console.log('Utilisation des magasins par défaut pour éviter les erreurs');
-      
-      const defaultUsers = [
-        {
-          id_user: 1,
-          nom: 'Principal',
-          prenom: 'Magasin',
-          nom_complet: 'Magasin Principal',
-          role: 'caissier',
-          actif: true
-        },
-        {
-          id_user: 2,
-          nom: 'Lyon',
-          prenom: 'Magasin',
-          nom_complet: 'Magasin Lyon',
-          role: 'caissier',
-          actif: true
-        },
-        {
-          id_user: 3,
-          nom: 'Marseille',
-          prenom: 'Magasin',
-          nom_complet: 'Magasin Marseille',
-          role: 'caissier',
-          actif: true
-        }
-      ];
-      
-      res.json({
-        status: 'ok',
-        data: defaultUsers,
-        count: defaultUsers.length
-      });
-    } catch (error) {
-      console.error('Erreur lors de la récupération des utilisateurs:', error);
-      res.status(500).json({
-        status: 'error',
-        message: 'Erreur lors de la récupération des utilisateurs'
-      });
-    }
+  static async getMagasinsFromUsers(_req: Request, res: Response) {
+    res.status(501).json({
+      status: 'error',
+      code: 'USER_STORE_LINK_NOT_IN_SCHEMA',
+      message: 'Le schéma MegaCaisse ne lie pas les utilisateurs à un magasin.',
+    });
   }
 
-  // Récupérer les rapports Z par magasin (version simplifiée)
   static async getRapportsZByMagasin(req: Request, res: Response) {
     try {
-      const { code_magasin } = req.params;
-      
-      // Données de test pour éviter les erreurs de connexion
-      const mockRapports = [
-        {
-          id: 1,
-          code_magasin: code_magasin,
-          caisse: 1,
-          date_from: '2024-02-10 08:00:00',
-          date_to: '2024-02-10 20:00:00',
-          nb_tickets: 150,
-          total_ttc: 1500.00,
-          total_ht: 1250.00,
-          total_tva: 250.00,
-          total_remise: 0,
-          is_void: false
-        }
-      ];
-      
-      console.log(`Rapports Z pour magasin ${code_magasin}:`, mockRapports);
-      
-      res.json({
-        status: 'ok',
-        data: mockRapports,
-        count: mockRapports.length
-      });
+      const rapports = await DatabaseService.query(
+        `
+        SELECT
+          z.id,
+          z.Date AS dateRapport,
+          z.Code_Magasin AS codeMagasin,
+          COALESCE(m.Nom_Magasin, z.Code_Magasin, '') AS nomMagasin,
+          z.Nbr_Tickets AS nbTickets,
+          z.CA_TTC_Jour AS totalTTC,
+          z.PDF_Base64 AS pdfBase64
+        FROM Zreports z
+        LEFT JOIN Magasin m ON m.Code_Magasin = z.Code_Magasin
+        WHERE z.Code_Magasin = ?
+        ORDER BY z.Date DESC, z.id DESC
+        `,
+        [req.params.code_magasin]
+      );
+
+      res.json({ status: 'ok', data: rapports, count: rapports.length });
     } catch (error) {
       console.error('Erreur lors de la récupération des rapports Z:', error);
       res.status(500).json({
         status: 'error',
-        message: 'Erreur lors de la récupération des rapports Z'
+        message: 'Erreur lors de la récupération des rapports Z',
       });
     }
   }

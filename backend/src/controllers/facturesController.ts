@@ -133,50 +133,19 @@ export class FacturesController {
       
       const facture = factureResult[0];
       
-      // Récupérer les articles liés à cette facture depuis la table ligne_vente
-      let produits = [];
-      
-      try {
-        const articlesQuery = `
-          SELECT
-            lv.id AS ligneId,
-            lv.article_id AS articleId,
-            COALESCE(a.LIBELLE, 'Article inconnu') AS designation,
-            lv.quantite AS quantite,
-            lv.prix_unitaire AS prixUnitaire,
-            lv.remise AS remise,
-            ROUND(lv.quantite * lv.prix_unitaire * (1 - COALESCE(lv.remise, 0) / 100), 2) AS totalHT,
-            ROUND(lv.quantite * lv.prix_unitaire * (1 - COALESCE(lv.remise, 0) / 100) * 1.2, 2) AS totalTTC,
-            ROUND(lv.quantite * lv.prix_unitaire * (1 - COALESCE(lv.remise, 0) / 100) * 0.2, 2) AS totalTVA
-          FROM ligne_vente lv
-          LEFT JOIN articles a ON a.ARCLEUNIK = lv.article_id
-          WHERE lv.vente_id = ?
-          ORDER BY lv.id ASC
-        `;
-        
-        produits = await DatabaseService.query(articlesQuery, [id]);
-      } catch (error) {
-        console.log('Erreur lors de la récupération des lignes de vente :', error);
-      }
-      
-      // Si aucun produit trouvé, créer un produit à partir des données de la facture
-      if (!Array.isArray(produits) || produits.length === 0) {
-        const totalHT = parseFloat(facture.Total_B_HT || 0);
-        const totalTTC = parseFloat(facture.Total_TTC || 0);
-        const totalTVA = parseFloat(facture.Total_Tva || 0);
-        
-        produits = [
-          {
-            AR_Design: `Vente globale - Facture ${facture.Numero}`,
-            AR_Qte: 1,
-            AR_Prix_Unitaire: totalHT,
-            AR_Montant_HT: totalHT,
-            AR_Taux_TVA: totalHT > 0 ? (totalTVA / totalHT * 100) : 20,
-            AR_Montant_TVA: totalTVA,
-            AR_Montant_TTC: totalTTC
-          }
-        ];
-      }
+      // Le schéma MegaCaisse ne conserve pas les lignes de facture séparément.
+      const totalHT = Number(facture.Total_B_HT || 0);
+      const totalTTC = Number(facture.Total_TTC || 0);
+      const totalTVA = Number(facture.Total_Tva || 0);
+      const produits = [{
+        AR_Design: `Vente globale - Facture ${facture.Numero}`,
+        AR_Qte: 1,
+        AR_Prix_Unitaire: totalHT,
+        AR_Montant_HT: totalHT,
+        AR_Taux_TVA: totalHT > 0 ? (totalTVA / totalHT * 100) : 0,
+        AR_Montant_TVA: totalTVA,
+        AR_Montant_TTC: totalTTC,
+      }];
       
       res.json({
         status: 'ok',

@@ -1,16 +1,19 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 import { AuthController } from '../controllers/authController';
 import { sendPasswordResetEmail } from '../controllers/emailController';
 import { DatabaseService } from '../services/databaseService';
+import { getRequiredEnvVar } from '../config/env';
+import { hashPassword } from '../utils/passwordHash';
 
 const router = Router();
 
 const FRONTEND_URL = (
   process.env.FRONTEND_URL || 'http://localhost:3001'
 ).replace(/\/+$/, '');
+const JWT_SECRET = getRequiredEnvVar('JWT_SECRET');
 
 const GENERIC_RESET_MESSAGE =
   'Si ce compte existe, un email de récupération a été envoyé.';
@@ -56,8 +59,8 @@ router.post('/forgot-password', async (req, res) => {
 
     const rows = await DatabaseService.query(
       `
-      SELECT id, Login, Nom, Prenom, Email
-      FROM users
+      SELECT id, Login, Nom, Prenom, Email, Password
+      FROM Users
       WHERE Email = ? OR Login = ?
       LIMIT 1
       `,
@@ -81,6 +84,7 @@ router.post('/forgot-password', async (req, res) => {
       Nom?: string;
       Prenom?: string;
       Email?: string;
+      Password: string;
     };
 
     if (!user.Email || !user.Email.includes('@')) {
@@ -94,57 +98,21 @@ router.post('/forgot-password', async (req, res) => {
       });
     }
 
-    /*
-     * Le token envoyé par email reste secret.
-     * Seul son hash SHA-256 est enregistré dans la base.
-     */
-    const resetToken = crypto.randomBytes(32).toString('hex');
-
-    const resetTokenHash = crypto
+    const passwordFingerprint = crypto
       .createHash('sha256')
-      .update(resetToken)
+      .update(String(user.Password || ''))
       .digest('hex');
-
-    const expirationDate = new Date(
-      Date.now() + 60 * 60 * 1000
-    );
-
-    await DatabaseService.update(
-      `
-      UPDATE users
-      SET reset_token = ?,
-          reset_token_expires = ?
-      WHERE id = ?
-      `,
-      [resetTokenHash, expirationDate, user.id]
+    const resetToken = jwt.sign(
+      { purpose: 'password-reset', userId: user.id, passwordFingerprint },
+      JWT_SECRET,
+      { expiresIn: '1h' }
     );
 
     const resetLink =
       `${FRONTEND_URL}/reset-password` +
       `?token=${encodeURIComponent(resetToken)}`;
 
-    try {
-      await sendPasswordResetEmail(
-        user.Email,
-        resetLink,
-        user.Prenom
-      );
-    } catch (emailError) {
-      /*
-       * Supprimer le token si l'envoi échoue.
-       */
-      await DatabaseService.update(
-        `
-        UPDATE users
-        SET reset_token = NULL,
-            reset_token_expires = NULL
-        WHERE id = ?
-        `,
-        [user.id]
-      );
-
-      throw emailError;
-    }
+    await sendPasswordResetEmail(user.Email, resetLink, user.Prenom);
 
     return res.json({
       success: true,
@@ -191,44 +159,58 @@ router.post('/reset-password', async (req, res) => {
       });
     }
 
-    const resetTokenHash = crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
-
-    const rows = await DatabaseService.query(
-      `
-      SELECT id
-      FROM users
-      WHERE reset_token = ?
-        AND reset_token_expires IS NOT NULL
-        AND reset_token_expires > NOW()
-      LIMIT 1
-      `,
-      [resetTokenHash]
-    );
-
-    if (!rows || rows.length === 0) {
+    let decoded: jwt.JwtPayload;
+    try {
+      const payload = jwt.verify(token, JWT_SECRET);
+      if (
+        typeof payload === 'string' ||
+        payload.purpose !== 'password-reset' ||
+        typeof payload.userId !== 'number' ||
+        typeof payload.passwordFingerprint !== 'string'
+      ) {
+        throw new Error('Invalid reset token payload');
+      }
+      decoded = payload;
+    } catch {
       return res.status(400).json({
         success: false,
         message: 'Lien invalide, expiré ou déjà utilisé',
       });
     }
 
-    const user = rows[0] as { id: number };
+    const rows = await DatabaseService.query(
+      'SELECT id, Password FROM Users WHERE id = ? LIMIT 1',
+      [decoded.userId]
+    );
+    if (rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Lien invalide, expiré ou déjà utilisé',
+      });
+    }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const user = rows[0] as { id: number; Password: string };
+    const currentFingerprint = crypto
+      .createHash('sha256')
+      .update(String(user.Password || ''))
+      .digest('hex');
+    if (currentFingerprint !== decoded.passwordFingerprint) {
+      return res.status(400).json({
+        success: false,
+        message: 'Lien invalide, expiré ou déjà utilisé',
+      });
+    }
+
+    const hashedPassword = await hashPassword(password);
 
     await DatabaseService.update(
       `
-      UPDATE users
+      UPDATE Users
       SET Password = ?,
-          reset_token = NULL,
-          reset_token_expires = NULL
+          Derniere_MAJ = CURDATE()
       WHERE id = ?
-        AND reset_token = ?
       `,
-      [hashedPassword, user.id, resetTokenHash]
+      [hashedPassword, user.id]
     );
 
     return res.json({

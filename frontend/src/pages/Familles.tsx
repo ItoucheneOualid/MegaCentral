@@ -33,6 +33,7 @@ import {
 } from '@mui/icons-material';
 
 import api from '../services/api';
+import { normalizeArray, normalizeFamille } from '../utils/megaCaisseDisplay';
 
 interface Famille2 {
   F2CLEUNIK: number;
@@ -56,7 +57,8 @@ const Familles: React.FC = () => {
       setError(null);
 
       const response = await api.get('/familles/familles2');
-      setFamilles2(response.data.data || []);
+      const rows = normalizeArray<any>(response.data).map(normalizeFamille);
+      setFamilles2(rows);
     } catch (err) {
       console.error('Erreur lors du chargement des sous-familles:', err);
       setError('Erreur lors du chargement des sous-familles');

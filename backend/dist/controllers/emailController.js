@@ -5,197 +5,202 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendPasswordResetEmail = exports.sendEmail = void 0;
 const nodemailer_1 = __importDefault(require("nodemailer"));
-// Configuration du transporteur email
+const smtpPort = Number(process.env.SMTP_PORT || '587');
+const smtpSecure = process.env.SMTP_SECURE === 'true';
+const smtpUser = process.env.SMTP_USER || '';
+const smtpPassword = process.env.SMTP_PASS || '';
+const testMode = process.env.EMAIL_TEST_MODE === 'true';
+const smtpFrom = process.env.SMTP_FROM ||
+    `MEGA-Central <${smtpUser}>`;
 const transporter = nodemailer_1.default.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true',
+    port: smtpPort,
+    secure: smtpSecure,
+    requireTLS: smtpPort === 587,
     auth: {
-        user: process.env.SMTP_USER || '',
-        pass: process.env.SMTP_PASS || '',
+        user: smtpUser,
+        pass: smtpPassword,
     },
 });
-// MODE TEST : Simuler l'envoi d'email
-const TEST_MODE = process.env.EMAIL_TEST_MODE === 'true';
+const escapeHtml = (value) => {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+};
+const createPdfAttachment = (attachment) => {
+    if (!attachment) {
+        return undefined;
+    }
+    let base64Content = null;
+    let filename = 'Facture.pdf';
+    if (typeof attachment === 'string') {
+        base64Content = attachment;
+    }
+    else if (typeof attachment === 'object' &&
+        typeof attachment.content === 'string') {
+        base64Content = attachment.content;
+        if (typeof attachment.filename === 'string') {
+            filename = attachment.filename;
+        }
+    }
+    else if (Buffer.isBuffer(attachment)) {
+        return {
+            filename,
+            content: attachment,
+            contentType: 'application/pdf',
+        };
+    }
+    if (!base64Content) {
+        throw new Error('Format de pièce jointe invalide');
+    }
+    const base64Marker = 'base64,';
+    if (base64Content.includes(base64Marker)) {
+        base64Content = base64Content.split(base64Marker)[1];
+    }
+    base64Content = base64Content.replace(/\s/g, '');
+    const pdfBuffer = Buffer.from(base64Content, 'base64');
+    if (pdfBuffer.length === 0 ||
+        pdfBuffer.toString('utf8', 0, 5) !== '%PDF-') {
+        throw new Error('Le fichier reçu n’est pas un PDF valide');
+    }
+    const maximumSize = 10 * 1024 * 1024;
+    if (pdfBuffer.length > maximumSize) {
+        throw new Error('La pièce jointe dépasse la taille autorisée');
+    }
+    const safeFilename = filename
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .slice(0, 100);
+    return {
+        filename: safeFilename || 'Facture.pdf',
+        content: pdfBuffer,
+        contentType: 'application/pdf',
+    };
+};
+/**
+ * Envoi d’un email depuis les fonctionnalités internes.
+ */
 const sendEmail = async (req, res) => {
     try {
-        console.log('🔧 Début de l\'envoi d\'email...');
-        console.log('🧪 MODE TEST ACTIVÉ:', TEST_MODE);
-        console.log('📧 Variables SMTP:', {
-            host: process.env.SMTP_HOST || 'smtp.gmail.com',
-            port: process.env.SMTP_PORT || '587',
-            user: process.env.SMTP_USER || 'NON DÉFINI',
-            pass: process.env.SMTP_PASS ? '***' : 'NON DÉFINI',
-            test_mode: process.env.EMAIL_TEST_MODE
-        });
-        const { to, subject, message, cc, bcc, attachment } = req.body;
-        console.log('📨 Données reçues:', { to, subject, message: message?.substring(0, 50) + '...', hasAttachment: !!attachment });
-        console.log('📎 Attachment brut:', attachment);
-        // Validation des champs requis
-        if (!to || !subject || !message) {
-            console.log('❌ Validation échouée - champs manquants');
+        const { to, subject, message, cc, bcc, attachment, } = req.body;
+        if (typeof to !== 'string' ||
+            typeof subject !== 'string' ||
+            typeof message !== 'string' ||
+            !to.trim() ||
+            !subject.trim() ||
+            !message.trim()) {
             return res.status(400).json({
                 success: false,
-                message: 'Champs requis manquants: email, sujet ou message'
+                message: 'Email, sujet et message requis',
             });
         }
-        // Préparer la pièce jointe PDF correctement
-        let formattedAttachment = undefined;
-        if (attachment) {
-            console.log('🔧 Formatage de la pièce jointe...');
-            console.log('📎 Type attachment:', typeof attachment);
-            console.log('📎 Taille reçue:', attachment.length, 'caractères');
-            console.log('📎 Début reçu:', attachment.substring(0, 100) + '...');
-            console.log('📎 Fin reçu:', attachment.substring(attachment.length - 50));
-            // Si l'attachment est une string base64 (format jsPDF)
-            if (typeof attachment === 'string') {
-                let cleanBase64 = attachment;
-                console.log('📎 Base64 brut:', cleanBase64.substring(0, 150) + '...');
-                // Gérer le format avec filename
-                if (attachment.includes('filename=generated.pdf;base64,')) {
-                    cleanBase64 = attachment.split('filename=generated.pdf;base64,')[1];
-                }
-                else if (attachment.startsWith('data:application/pdf;base64,')) {
-                    cleanBase64 = attachment.replace('data:application/pdf;base64,', '');
-                }
-                else if (attachment.includes('base64,')) {
-                    cleanBase64 = attachment.split('base64,')[1];
-                }
-                console.log('📎 Base64 nettoyé taille:', cleanBase64.length);
-                console.log('📎 Base64 nettoyé début:', cleanBase64.substring(0, 50) + '...');
-                console.log('📎 Base64 nettoyé fin:', cleanBase64.substring(cleanBase64.length - 50));
-                // Vérifier que le base64 commence par JVBER (signature PDF)
-                if (!cleanBase64.startsWith('JVBER')) {
-                    console.error('❌ ERREUR: Le base64 ne commence pas par JVBER !');
-                    console.error('❌ Début actuel:', cleanBase64.substring(0, 20));
-                }
-                // Vérifier le padding du base64 (doit être multiple de 4)
-                const paddingNeeded = (4 - (cleanBase64.length % 4)) % 4;
-                if (paddingNeeded > 0) {
-                    console.log('🔧 Ajout de padding:', paddingNeeded, 'caractères');
-                    cleanBase64 += '='.repeat(paddingNeeded);
-                    console.log('📎 Base64 avec padding taille:', cleanBase64.length);
-                }
-                // Créer le Buffer avec validation
-                let pdfBuffer;
-                try {
-                    pdfBuffer = Buffer.from(cleanBase64, 'base64');
-                    console.log('✅ Buffer créé avec succès, taille:', pdfBuffer.length);
-                    // Vérifier que le Buffer commence par la signature PDF (%PDF-)
-                    const pdfSignature = pdfBuffer.toString('utf8', 0, 5);
-                    console.log('📄 Signature PDF:', pdfSignature);
-                    if (pdfSignature !== '%PDF-') {
-                        console.error('❌ ERREUR: Le Buffer ne commence pas par %PDF- !');
-                        console.error('❌ Début Buffer:', pdfBuffer.toString('utf8', 0, 20));
-                    }
-                }
-                catch (bufferError) {
-                    console.error('❌ ERREUR lors de la création du Buffer:', bufferError);
-                    throw new Error('Impossible de créer le Buffer PDF');
-                }
-                formattedAttachment = {
-                    filename: `Facture.pdf`,
-                    content: pdfBuffer,
-                    contentType: 'application/pdf'
-                };
-            }
-            // Si l'attachment est un objet avec content (nouveau format)
-            else if (attachment && attachment.content) {
-                console.log('📎 Format objet détecté');
-                console.log('📎 Content type:', typeof attachment.content);
-                console.log('📎 Content length:', Buffer.isBuffer(attachment.content) ? attachment.content.length : 'N/A');
-                let pdfBuffer;
-                if (Buffer.isBuffer(attachment.content)) {
-                    pdfBuffer = attachment.content;
-                    console.log('✅ Buffer direct utilisé, taille:', pdfBuffer.length);
-                }
-                else {
-                    pdfBuffer = Buffer.from(attachment.content);
-                    console.log('✅ Buffer créé depuis content, taille:', pdfBuffer.length);
-                }
-                // Vérifier la signature PDF
-                const pdfSignature = pdfBuffer.toString('utf8', 0, 5);
-                console.log('📄 Signature PDF:', pdfSignature);
-                formattedAttachment = {
-                    filename: attachment.filename || 'Facture.pdf',
-                    content: pdfBuffer,
-                    contentType: 'application/pdf'
-                };
-            }
-            // Si l'attachment est un buffer direct
-            else if (Buffer.isBuffer(attachment)) {
-                formattedAttachment = {
-                    filename: `Facture.pdf`,
-                    content: attachment,
-                    contentType: 'application/pdf'
-                };
-            }
-            console.log('✅ Pièce jointe formatée:', formattedAttachment ? {
-                filename: formattedAttachment.filename,
-                size: formattedAttachment.content.length,
-                type: formattedAttachment.contentType
-            } : 'Aucune');
-        }
-        // Configuration de l'email
-        const mailOptions = {
-            from: process.env.SMTP_USER || '"MEGA-CENTRAL" <noreply@megacentral.com>',
-            to: to,
-            subject: subject,
-            text: message,
-            cc: cc || undefined,
-            bcc: bcc || undefined,
-            attachments: formattedAttachment ? [formattedAttachment] : undefined,
-        };
-        console.log('📤 Tentative d\'envoi...');
-        // MODE TEST : Simuler l'envoi sans vraiment envoyer
-        if (TEST_MODE) {
-            console.log('🧪 MODE TEST - Simulation d\'envoi d\'email');
-            console.log('📧 Email simulé envoyé à:', to);
-            console.log('📄 Sujet:', subject);
-            console.log('📎 Pièce jointe:', attachment ? 'OUI' : 'NON');
+        const formattedAttachment = createPdfAttachment(attachment);
+        if (testMode) {
+            console.log(`Mode test : email simulé pour ${to.trim()}`);
             return res.status(200).json({
                 success: true,
-                message: `Email simulé envoyé avec succès à ${to} (MODE TEST)`,
-                test_mode: true
+                message: 'Email simulé avec succès',
+                test_mode: true,
             });
         }
-        // Envoi réel de l'email
-        await transporter.sendMail(mailOptions);
-        console.log('✅ Email envoyé avec succès à:', to);
-        res.status(200).json({
+        await transporter.sendMail({
+            from: smtpFrom,
+            to: to.trim(),
+            subject: subject.trim(),
+            text: message,
+            cc: typeof cc === 'string' && cc.trim()
+                ? cc.trim()
+                : undefined,
+            bcc: typeof bcc === 'string' && bcc.trim()
+                ? bcc.trim()
+                : undefined,
+            attachments: formattedAttachment
+                ? [formattedAttachment]
+                : undefined,
+        });
+        return res.status(200).json({
             success: true,
-            message: `Email envoyé avec succès à ${to}`
+            message: `Email envoyé avec succès à ${to.trim()}`,
         });
     }
     catch (error) {
-        console.error('❌ Erreur détaillée lors de l\'envoi de l\'email:', error);
-        console.error('❌ Stack trace:', error.stack);
-        res.status(500).json({
+        console.error('Erreur lors de l’envoi de l’email:', error);
+        return res.status(500).json({
             success: false,
-            message: 'Erreur lors de l\'envoi de l\'email',
-            error: error.message,
-            details: error.code || 'UNKNOWN_ERROR'
+            message: 'Erreur lors de l’envoi de l’email',
         });
     }
 };
 exports.sendEmail = sendEmail;
+/**
+ * Envoi du lien sécurisé de réinitialisation.
+ */
 const sendPasswordResetEmail = async (to, resetLink, prenom) => {
+    if (!smtpUser || !smtpPassword) {
+        throw new Error('Configuration SMTP manquante');
+    }
+    if (testMode) {
+        console.log(`Mode test : récupération simulée pour ${to}`);
+        return;
+    }
+    const safePrenom = escapeHtml(prenom || '');
+    const safeResetLink = escapeHtml(resetLink);
     await transporter.sendMail({
-        from: process.env.SMTP_USER || '"MEGA-CENTRAL" <noreply@megacentral.com>',
+        from: smtpFrom,
         to,
-        subject: 'Réinitialisation de votre mot de passe',
+        subject: 'Réinitialisation de votre mot de passe MegaCentrale',
+        text: [
+            `Bonjour ${prenom || ''},`,
+            '',
+            'Vous avez demandé la réinitialisation de votre mot de passe.',
+            `Ouvrez ce lien : ${resetLink}`,
+            '',
+            'Ce lien expire dans une heure et ne peut être utilisé qu’une seule fois.',
+            '',
+            'Si vous n’êtes pas à l’origine de cette demande, ignorez cet email.',
+        ].join('\n'),
         html: `
-      <h2>Réinitialisation du mot de passe</h2>
-      <p>Bonjour ${prenom || ''},</p>
-      <p>Vous avez demandé à réinitialiser votre mot de passe.</p>
-      <p>Cliquez sur le lien ci-dessous :</p>
-      <p>
-        <a href="${resetLink}">
-          Réinitialiser mon mot de passe
-        </a>
-      </p>
-      <p>Ce lien expire dans 1 heure.</p>
-      <p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a;">
+        <h2 style="color:#1d4ed8;">
+          Réinitialisation du mot de passe
+        </h2>
+
+        <p>Bonjour ${safePrenom},</p>
+
+        <p>
+          Vous avez demandé à réinitialiser votre mot de passe
+          MegaCentrale.
+        </p>
+
+        <p style="margin:30px 0;">
+          <a
+            href="${safeResetLink}"
+            style="
+              display:inline-block;
+              padding:14px 22px;
+              color:#ffffff;
+              background:#2563eb;
+              text-decoration:none;
+              border-radius:8px;
+              font-weight:bold;
+            "
+          >
+            Réinitialiser mon mot de passe
+          </a>
+        </p>
+
+        <p>
+          Ce lien expire dans une heure et ne peut être utilisé
+          qu’une seule fois.
+        </p>
+
+        <p style="color:#64748b;">
+          Si vous n’êtes pas à l’origine de cette demande,
+          ignorez cet email.
+        </p>
+      </div>
     `,
     });
 };

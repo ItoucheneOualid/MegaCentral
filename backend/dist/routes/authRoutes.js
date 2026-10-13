@@ -5,19 +5,29 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const crypto_1 = __importDefault(require("crypto"));
-const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const authController_1 = require("../controllers/authController");
 const emailController_1 = require("../controllers/emailController");
 const databaseService_1 = require("../services/databaseService");
+const env_1 = require("../config/env");
+const passwordHash_1 = require("../utils/passwordHash");
 const router = (0, express_1.Router)();
+const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:3001').replace(/\/+$/, '');
+const JWT_SECRET = (0, env_1.getRequiredEnvVar)('JWT_SECRET');
+const GENERIC_RESET_MESSAGE = 'Si ce compte existe, un email de récupération a été envoyé.';
 router.post('/login', authController_1.AuthController.login);
 router.get('/verify', authController_1.AuthController.authenticateToken, authController_1.AuthController.verifyToken);
 router.get('/profile', authController_1.AuthController.authenticateToken, authController_1.AuthController.getProfile);
 router.put('/profile', authController_1.AuthController.authenticateToken, authController_1.AuthController.updateProfile);
 router.post('/logout', authController_1.AuthController.logout);
+/**
+ * Demande de récupération du mot de passe.
+ */
 router.post('/forgot-password', async (req, res) => {
     try {
-        const { identifier } = req.body;
+        const identifier = typeof req.body?.identifier === 'string'
+            ? req.body.identifier.trim()
+            : '';
         if (!identifier) {
             return res.status(400).json({
                 success: false,
@@ -25,75 +35,113 @@ router.post('/forgot-password', async (req, res) => {
             });
         }
         const rows = await databaseService_1.DatabaseService.query(`
-      SELECT id, Login, Nom, Prenom, Email
-      FROM users
+      SELECT id, Login, Nom, Prenom, Email, Password
+      FROM Users
       WHERE Email = ? OR Login = ?
       LIMIT 1
       `, [identifier, identifier]);
+        /*
+         * Toujours retourner le même message afin de ne pas révéler
+         * si un compte existe ou non.
+         */
         if (!rows || rows.length === 0) {
             return res.json({
                 success: true,
-                message: 'Si le compte existe, un email a été envoyé.',
+                message: GENERIC_RESET_MESSAGE,
             });
         }
         const user = rows[0];
-        const token = crypto_1.default.randomBytes(32).toString('hex');
-        const expires = new Date(Date.now() + 60 * 60 * 1000);
-        await databaseService_1.DatabaseService.update(`
-      UPDATE users
-      SET reset_token = ?, reset_token_expires = ?
-      WHERE id = ?
-      `, [token, expires, user.id]);
-        const resetLink = `http://localhost:3001/reset-password?token=${token}`;
+        if (!user.Email || !user.Email.includes('@')) {
+            console.error(`Aucune adresse email valide pour l'utilisateur ${user.Login}`);
+            return res.json({
+                success: true,
+                message: GENERIC_RESET_MESSAGE,
+            });
+        }
+        const passwordFingerprint = crypto_1.default
+            .createHash('sha256')
+            .update(String(user.Password || ''))
+            .digest('hex');
+        const resetToken = jsonwebtoken_1.default.sign({ purpose: 'password-reset', userId: user.id, passwordFingerprint }, JWT_SECRET, { expiresIn: '1h' });
+        const resetLink = `${FRONTEND_URL}/reset-password` +
+            `?token=${encodeURIComponent(resetToken)}`;
         await (0, emailController_1.sendPasswordResetEmail)(user.Email, resetLink, user.Prenom);
         return res.json({
             success: true,
-            message: 'Un email de récupération a été envoyé.',
+            message: GENERIC_RESET_MESSAGE,
         });
     }
     catch (error) {
         console.error('Erreur forgot-password:', error);
         return res.status(500).json({
             success: false,
-            message: 'Erreur serveur récupération mot de passe',
+            message: 'Le service de récupération est temporairement indisponible.',
         });
     }
 });
+/**
+ * Enregistrement du nouveau mot de passe.
+ */
 router.post('/reset-password', async (req, res) => {
     try {
-        const { token, password } = req.body;
+        const token = typeof req.body?.token === 'string'
+            ? req.body.token.trim()
+            : '';
+        const password = typeof req.body?.password === 'string'
+            ? req.body.password
+            : '';
         if (!token || !password) {
             return res.status(400).json({
                 success: false,
-                message: 'Token et nouveau mot de passe requis',
+                message: 'Lien et nouveau mot de passe requis',
             });
         }
-        const rows = await databaseService_1.DatabaseService.query(`
-      SELECT id, reset_token_expires
-      FROM users
-      WHERE reset_token = ?
-      LIMIT 1
-      `, [token]);
-        if (!rows || rows.length === 0) {
+        if (password.length < 8) {
             return res.status(400).json({
                 success: false,
-                message: 'Lien invalide ou expiré',
+                message: 'Le nouveau mot de passe doit contenir au moins 8 caractères.',
+            });
+        }
+        let decoded;
+        try {
+            const payload = jsonwebtoken_1.default.verify(token, JWT_SECRET);
+            if (typeof payload === 'string' ||
+                payload.purpose !== 'password-reset' ||
+                typeof payload.userId !== 'number' ||
+                typeof payload.passwordFingerprint !== 'string') {
+                throw new Error('Invalid reset token payload');
+            }
+            decoded = payload;
+        }
+        catch {
+            return res.status(400).json({
+                success: false,
+                message: 'Lien invalide, expiré ou déjà utilisé',
+            });
+        }
+        const rows = await databaseService_1.DatabaseService.query('SELECT id, Password FROM Users WHERE id = ? LIMIT 1', [decoded.userId]);
+        if (rows.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Lien invalide, expiré ou déjà utilisé',
             });
         }
         const user = rows[0];
-        const expires = new Date(user.reset_token_expires);
-        if (!expires || expires.getTime() < Date.now()) {
+        const currentFingerprint = crypto_1.default
+            .createHash('sha256')
+            .update(String(user.Password || ''))
+            .digest('hex');
+        if (currentFingerprint !== decoded.passwordFingerprint) {
             return res.status(400).json({
                 success: false,
-                message: 'Lien invalide ou expiré',
+                message: 'Lien invalide, expiré ou déjà utilisé',
             });
         }
-        const hashedPassword = await bcryptjs_1.default.hash(password, 10);
+        const hashedPassword = await (0, passwordHash_1.hashPassword)(password);
         await databaseService_1.DatabaseService.update(`
-      UPDATE users
+      UPDATE Users
       SET Password = ?,
-          reset_token = NULL,
-          reset_token_expires = NULL
+          Derniere_MAJ = CURDATE()
       WHERE id = ?
       `, [hashedPassword, user.id]);
         return res.json({
@@ -105,7 +153,7 @@ router.post('/reset-password', async (req, res) => {
         console.error('Erreur reset-password:', error);
         return res.status(500).json({
             success: false,
-            message: 'Erreur serveur reset password',
+            message: 'Erreur serveur lors de la modification du mot de passe',
         });
     }
 });

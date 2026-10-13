@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { DatabaseService } from '../services/databaseService';
+import { hashPassword } from '../utils/passwordHash';
 
 export class DebugController {
   // Lister toutes les tables
   static async listTables(req: Request, res: Response) {
     try {
       const query = 'SHOW TABLES';
-      const [tables] = await DatabaseService.query(query);
+      const tables = await DatabaseService.query(query);
       
       res.json({
         success: true,
@@ -25,7 +26,7 @@ export class DebugController {
   // Afficher tous les utilisateurs
   static async getUsers(req: Request, res: Response) {
     try {
-      const users = await DatabaseService.query('SELECT id, Login, Nom, Prenom, Email, Is_Admin FROM users');
+      const users = await DatabaseService.query('SELECT id, Login, Nom, Prenom, Email, Is_Admin FROM Users');
       res.json({
         success: true,
         users: users
@@ -44,7 +45,7 @@ export class DebugController {
     try {
       const { login } = req.body;
       
-      const deleteQuery = 'DELETE FROM users WHERE Login = ?';
+      const deleteQuery = 'DELETE FROM Users WHERE Login = ?';
       await DatabaseService.query(deleteQuery, [login]);
       
       res.json({
@@ -56,25 +57,6 @@ export class DebugController {
       res.status(500).json({
         success: false,
         error: 'Erreur lors de la suppression de l\'utilisateur'
-      });
-    }
-  }
-
-  // Augmenter la taille du champ Password
-  static async fixPasswordField(req: Request, res: Response) {
-    try {
-      // Modifier la structure de la table
-      await DatabaseService.query('ALTER TABLE users MODIFY COLUMN Password VARCHAR(255)');
-      
-      res.json({
-        success: true,
-        message: 'Champ Password agrandi à VARCHAR(255)'
-      });
-    } catch (error) {
-      console.error('Erreur:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Erreur lors de la modification du champ Password'
       });
     }
   }
@@ -114,8 +96,8 @@ export class DebugController {
       const { login } = req.body;
       
       const query = `
-        SELECT id, Login, Password, Nom, Prenom, Email, Is_Admin
-        FROM users 
+        SELECT id, Login, Nom, Prenom, Email, Is_Admin
+        FROM Users
         WHERE Login = ?
       `;
       
@@ -135,7 +117,6 @@ export class DebugController {
         user: {
           id: user.id,
           Login: user.Login,
-          Password: user.Password,
           Nom: user.Nom,
           Prenom: user.Prenom,
           Email: user.Email,
@@ -151,42 +132,15 @@ export class DebugController {
     }
   }
 
-  // Créer un utilisateur avec mot de passe en clair (pour test)
-  static async createPlainUser(req: Request, res: Response) {
-    try {
-      const { login, password, nom, prenom, email, is_admin } = req.body;
-      
-      const insertQuery = `
-        INSERT INTO users (Login, Password, Nom, Prenom, Email, Is_Admin, Derniere_MAJ)
-        VALUES (?, ?, ?, ?, ?, ?, NOW())
-      `;
-      
-      await DatabaseService.query(insertQuery, [login, password, nom, prenom, email, is_admin]);
-      
-      res.json({
-        success: true,
-        message: 'Utilisateur créé avec mot de passe en clair'
-      });
-    } catch (error) {
-      console.error('Erreur:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Erreur lors de la création de l\'utilisateur'
-      });
-    }
-  }
-
   // Mettre à jour le mot de passe d'un utilisateur
   static async updateUserPassword(req: Request, res: Response) {
     try {
       const { login, password } = req.body;
       
-      // Hacher le mot de passe avec bcrypt
-      const bcrypt = require('bcryptjs');
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await hashPassword(password);
       
       const updateQuery = `
-        UPDATE users SET Password = ?, Derniere_MAJ = NOW()
+        UPDATE Users SET Password = ?, Derniere_MAJ = CURDATE()
         WHERE Login = ?
       `;
       
@@ -210,12 +164,10 @@ export class DebugController {
     try {
       const { login, password, nom, prenom, email, is_admin } = req.body;
       
-      // Hacher le mot de passe avec bcrypt
-      const bcrypt = require('bcryptjs');
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await hashPassword(password);
       
       const insertQuery = `
-        INSERT INTO users (Login, Password, Nom, Prenom, Email, Is_Admin, Derniere_MAJ)
+        INSERT INTO Users (Login, Password, Nom, Prenom, Email, Is_Admin, Derniere_MAJ)
         VALUES (?, ?, ?, ?, ?, ?, NOW())
       `;
       
@@ -237,7 +189,7 @@ export class DebugController {
   // Afficher la structure de la table users
   static async getUsersTableStructure(req: Request, res: Response) {
     try {
-      const structure = await DatabaseService.query('DESCRIBE users');
+      const structure = await DatabaseService.query('DESCRIBE Users');
       res.json({
         success: true,
         structure: structure

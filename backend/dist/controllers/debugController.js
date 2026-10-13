@@ -2,12 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DebugController = void 0;
 const databaseService_1 = require("../services/databaseService");
+const passwordHash_1 = require("../utils/passwordHash");
 class DebugController {
     // Lister toutes les tables
     static async listTables(req, res) {
         try {
             const query = 'SHOW TABLES';
-            const [tables] = await databaseService_1.DatabaseService.query(query);
+            const tables = await databaseService_1.DatabaseService.query(query);
             res.json({
                 success: true,
                 data: tables,
@@ -25,7 +26,7 @@ class DebugController {
     // Afficher tous les utilisateurs
     static async getUsers(req, res) {
         try {
-            const users = await databaseService_1.DatabaseService.query('SELECT id, Login, Nom, Prenom, Email, Is_Admin FROM users');
+            const users = await databaseService_1.DatabaseService.query('SELECT id, Login, Nom, Prenom, Email, Is_Admin FROM Users');
             res.json({
                 success: true,
                 users: users
@@ -43,7 +44,7 @@ class DebugController {
     static async deleteUser(req, res) {
         try {
             const { login } = req.body;
-            const deleteQuery = 'DELETE FROM users WHERE Login = ?';
+            const deleteQuery = 'DELETE FROM Users WHERE Login = ?';
             await databaseService_1.DatabaseService.query(deleteQuery, [login]);
             res.json({
                 success: true,
@@ -55,24 +56,6 @@ class DebugController {
             res.status(500).json({
                 success: false,
                 error: 'Erreur lors de la suppression de l\'utilisateur'
-            });
-        }
-    }
-    // Augmenter la taille du champ Password
-    static async fixPasswordField(req, res) {
-        try {
-            // Modifier la structure de la table
-            await databaseService_1.DatabaseService.query('ALTER TABLE users MODIFY COLUMN Password VARCHAR(255)');
-            res.json({
-                success: true,
-                message: 'Champ Password agrandi à VARCHAR(255)'
-            });
-        }
-        catch (error) {
-            console.error('Erreur:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Erreur lors de la modification du champ Password'
             });
         }
     }
@@ -106,8 +89,8 @@ class DebugController {
         try {
             const { login } = req.body;
             const query = `
-        SELECT id, Login, Password, Nom, Prenom, Email, Is_Admin
-        FROM users 
+        SELECT id, Login, Nom, Prenom, Email, Is_Admin
+        FROM Users
         WHERE Login = ?
       `;
             const users = await databaseService_1.DatabaseService.query(query, [login]);
@@ -123,7 +106,6 @@ class DebugController {
                 user: {
                     id: user.id,
                     Login: user.Login,
-                    Password: user.Password,
                     Nom: user.Nom,
                     Prenom: user.Prenom,
                     Email: user.Email,
@@ -139,37 +121,13 @@ class DebugController {
             });
         }
     }
-    // Créer un utilisateur avec mot de passe en clair (pour test)
-    static async createPlainUser(req, res) {
-        try {
-            const { login, password, nom, prenom, email, is_admin } = req.body;
-            const insertQuery = `
-        INSERT INTO users (Login, Password, Nom, Prenom, Email, Is_Admin, Derniere_MAJ)
-        VALUES (?, ?, ?, ?, ?, ?, NOW())
-      `;
-            await databaseService_1.DatabaseService.query(insertQuery, [login, password, nom, prenom, email, is_admin]);
-            res.json({
-                success: true,
-                message: 'Utilisateur créé avec mot de passe en clair'
-            });
-        }
-        catch (error) {
-            console.error('Erreur:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Erreur lors de la création de l\'utilisateur'
-            });
-        }
-    }
     // Mettre à jour le mot de passe d'un utilisateur
     static async updateUserPassword(req, res) {
         try {
             const { login, password } = req.body;
-            // Hacher le mot de passe avec bcrypt
-            const bcrypt = require('bcryptjs');
-            const hashedPassword = await bcrypt.hash(password, 10);
+            const hashedPassword = await (0, passwordHash_1.hashPassword)(password);
             const updateQuery = `
-        UPDATE users SET Password = ?, Derniere_MAJ = NOW()
+        UPDATE Users SET Password = ?, Derniere_MAJ = CURDATE()
         WHERE Login = ?
       `;
             await databaseService_1.DatabaseService.query(updateQuery, [hashedPassword, login]);
@@ -190,11 +148,9 @@ class DebugController {
     static async createTestUser(req, res) {
         try {
             const { login, password, nom, prenom, email, is_admin } = req.body;
-            // Hacher le mot de passe avec bcrypt
-            const bcrypt = require('bcryptjs');
-            const hashedPassword = await bcrypt.hash(password, 10);
+            const hashedPassword = await (0, passwordHash_1.hashPassword)(password);
             const insertQuery = `
-        INSERT INTO users (Login, Password, Nom, Prenom, Email, Is_Admin, Derniere_MAJ)
+        INSERT INTO Users (Login, Password, Nom, Prenom, Email, Is_Admin, Derniere_MAJ)
         VALUES (?, ?, ?, ?, ?, ?, NOW())
       `;
             await databaseService_1.DatabaseService.query(insertQuery, [login, hashedPassword, nom, prenom, email, is_admin]);
@@ -214,7 +170,7 @@ class DebugController {
     // Afficher la structure de la table users
     static async getUsersTableStructure(req, res) {
         try {
-            const structure = await databaseService_1.DatabaseService.query('DESCRIBE users');
+            const structure = await databaseService_1.DatabaseService.query('DESCRIBE Users');
             res.json({
                 success: true,
                 structure: structure

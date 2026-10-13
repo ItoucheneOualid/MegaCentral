@@ -1,7 +1,11 @@
 import { Router } from 'express';
-import { getTickets, getTicketById, getTicketPDF, saveTicketPDF, generateAndSaveTicketPDF } from '../controllers/tickets.controller';
+import { getTickets, getTicketById, getTicketPDF, saveTicketPDF, generateAndSaveTicketPDF, importTickets } from '../controllers/tickets.controller';
+import { authenticateMegaCaisse } from '../middleware/apiKeyMiddleware';
 
 const router = Router();
+
+// Import de masse depuis MegaCaisse (clé API dédiée, pas de session utilisateur)
+router.post('/import', authenticateMegaCaisse, importTickets);
 
 // Routes principales pour les tickets
 router.get('/', getTickets);

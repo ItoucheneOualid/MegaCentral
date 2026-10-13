@@ -3,10 +3,37 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import DatabaseService from "../services/databaseService";
 import { getRequiredEnvVar } from "../config/env";
+import { hashPassword, verifyPasswordHash } from "../utils/passwordHash";
 
 const JWT_SECRET = getRequiredEnvVar("JWT_SECRET");
 
 export class AuthController {
+  static async isPasswordValid(storedPassword: unknown, inputPassword: string): Promise<boolean> {
+    if (typeof inputPassword !== "string" || !inputPassword) {
+      return false;
+    }
+
+    if (typeof storedPassword !== "string") {
+      return false;
+    }
+
+    const normalizedStoredPassword = storedPassword.trim();
+
+    if (!normalizedStoredPassword) {
+      return false;
+    }
+
+    if (/^\$2[aby]\$/.test(normalizedStoredPassword)) {
+      return bcrypt.compare(inputPassword, normalizedStoredPassword);
+    }
+
+    if (normalizedStoredPassword.startsWith("s1$")) {
+      return verifyPasswordHash(inputPassword, normalizedStoredPassword);
+    }
+
+    return normalizedStoredPassword === inputPassword;
+  }
+
   static async login(req: Request, res: Response) {
     try {
       const { login, password } = req.body;
@@ -29,7 +56,7 @@ export class AuthController {
           Voir_prix_Achat,
           Is_Admin,
           Derniere_Connexion_Time
-        FROM users
+        FROM Users
         WHERE Login = ?
         LIMIT 1
       `;
@@ -44,15 +71,10 @@ export class AuthController {
       }
 
       const user = users[0];
-      let isPasswordValid = false;
-
-      // Accepte les formats bcrypt standards : $2a$, $2b$ et $2y$.
-      if (
-        typeof user.Password === "string" &&
-        /^\$2[aby]\$/.test(user.Password)
-      ) {
-        isPasswordValid = await bcrypt.compare(password, user.Password);
-      }
+      const isPasswordValid = await AuthController.isPasswordValid(
+        user.Password,
+        password
+      );
 
       if (!isPasswordValid) {
         return res.status(401).json({
@@ -61,8 +83,19 @@ export class AuthController {
         });
       }
 
+      if (
+        typeof user.Password === "string" &&
+        !user.Password.startsWith("s1$") &&
+        !/^\$2[aby]\$/.test(user.Password)
+      ) {
+        await DatabaseService.query(
+          "UPDATE Users SET Password = ?, Derniere_MAJ = CURDATE() WHERE id = ?",
+          [await hashPassword(password), user.id]
+        );
+      }
+
       await DatabaseService.query(
-        "UPDATE users SET Derniere_Connexion_Time = NOW() WHERE id = ?",
+        "UPDATE Users SET Derniere_Connexion_Time = NOW() WHERE id = ?",
         [user.id]
       );
 
@@ -141,7 +174,7 @@ export class AuthController {
           Email,
           Voir_prix_Achat,
           Is_Admin
-        FROM users
+        FROM Users
         WHERE id = ?
         LIMIT 1
       `;
@@ -205,7 +238,7 @@ export class AuthController {
           Voir_prix_Achat,
           Is_Admin,
           Derniere_Connexion_Time
-        FROM users
+        FROM Users
         WHERE id = ?
         LIMIT 1
       `;
@@ -272,7 +305,7 @@ export class AuthController {
 
       await DatabaseService.query(
         `
-          UPDATE users
+          UPDATE Users
           SET Nom = ?, Prenom = ?, Email = ?
           WHERE id = ?
         `,
@@ -290,7 +323,7 @@ export class AuthController {
             Voir_prix_Achat,
             Is_Admin,
             Derniere_Connexion_Time
-          FROM users
+          FROM Users
           WHERE id = ?
           LIMIT 1
         `,

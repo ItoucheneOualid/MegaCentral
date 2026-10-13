@@ -3,9 +3,24 @@
  * Centralized API URL configuration for all frontend services
  */
 
+const getDefaultApiUrl = (): string => {
+  if (typeof window === 'undefined') {
+    return 'http://localhost:3000/api';
+  }
+
+  const isLocalHost =
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1';
+
+  if (isLocalHost) {
+    return 'http://localhost:3000/api';
+  }
+
+  return `${window.location.origin}/api`;
+};
+
 const rawApiUrl = (
-  process.env.REACT_APP_API_URL ||
-  'http://localhost:3000/api'
+  process.env.REACT_APP_API_URL || getDefaultApiUrl()
 ).trim();
 
 const normalizedApiUrl = rawApiUrl.replace(/\/+$/, '');

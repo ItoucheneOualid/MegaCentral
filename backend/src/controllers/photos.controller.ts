@@ -8,7 +8,7 @@ export const getPhotoByArticleId = async (req: Request, res: Response): Promise<
 
     const [rows] = await pool.execute(
       `
-      SELECT IDFOTO, ARCLEUNIK, Photo_Name, Photo_Base64
+      SELECT ARCLEUNIK, Photo_Name, Photo_Base64
       FROM fotos
       WHERE ARCLEUNIK = ?
       LIMIT 1
@@ -54,7 +54,7 @@ export const addPhotoToArticle = async (req: Request, res: Response): Promise<vo
     const pool = getPool();
 
     const [existingPhotos] = await pool.execute(
-      'SELECT IDFOTO FROM fotos WHERE ARCLEUNIK = ? LIMIT 1',
+      'SELECT ARCLEUNIK FROM fotos WHERE ARCLEUNIK = ? LIMIT 1',
       [id]
     );
 
