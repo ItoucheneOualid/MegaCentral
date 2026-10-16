@@ -26,7 +26,7 @@ class DebugController {
     // Afficher tous les utilisateurs
     static async getUsers(req, res) {
         try {
-            const users = await databaseService_1.DatabaseService.query('SELECT id, Login, Nom, Prenom, Email, Is_Admin FROM Users');
+            const users = await databaseService_1.DatabaseService.query('SELECT id, Login, Nom, Prenom, Email, Is_Admin FROM users');
             res.json({
                 success: true,
                 users: users
@@ -44,7 +44,7 @@ class DebugController {
     static async deleteUser(req, res) {
         try {
             const { login } = req.body;
-            const deleteQuery = 'DELETE FROM Users WHERE Login = ?';
+            const deleteQuery = 'DELETE FROM users WHERE Login = ?';
             await databaseService_1.DatabaseService.query(deleteQuery, [login]);
             res.json({
                 success: true,
@@ -90,7 +90,7 @@ class DebugController {
             const { login } = req.body;
             const query = `
         SELECT id, Login, Nom, Prenom, Email, Is_Admin
-        FROM Users
+        FROM users
         WHERE Login = ?
       `;
             const users = await databaseService_1.DatabaseService.query(query, [login]);
@@ -127,7 +127,7 @@ class DebugController {
             const { login, password } = req.body;
             const hashedPassword = await (0, passwordHash_1.hashPassword)(password);
             const updateQuery = `
-        UPDATE Users SET Password = ?, Derniere_MAJ = CURDATE()
+        UPDATE users SET Password = ?, Derniere_MAJ = CURDATE()
         WHERE Login = ?
       `;
             await databaseService_1.DatabaseService.query(updateQuery, [hashedPassword, login]);
@@ -150,7 +150,7 @@ class DebugController {
             const { login, password, nom, prenom, email, is_admin } = req.body;
             const hashedPassword = await (0, passwordHash_1.hashPassword)(password);
             const insertQuery = `
-        INSERT INTO Users (Login, Password, Nom, Prenom, Email, Is_Admin, Derniere_MAJ)
+        INSERT INTO users (Login, Password, Nom, Prenom, Email, Is_Admin, Derniere_MAJ)
         VALUES (?, ?, ?, ?, ?, ?, NOW())
       `;
             await databaseService_1.DatabaseService.query(insertQuery, [login, hashedPassword, nom, prenom, email, is_admin]);
@@ -170,7 +170,7 @@ class DebugController {
     // Afficher la structure de la table users
     static async getUsersTableStructure(req, res) {
         try {
-            const structure = await databaseService_1.DatabaseService.query('DESCRIBE Users');
+            const structure = await databaseService_1.DatabaseService.query('DESCRIBE users');
             res.json({
                 success: true,
                 structure: structure

@@ -11,8 +11,8 @@ const RAPPORTS_SELECT = `
     z.Nbr_Tickets AS nbTickets,
     z.CA_TTC_Jour AS totalTTC,
     z.PDF_Base64 AS pdfBase64
-  FROM Zreports z
-  LEFT JOIN Magasin m ON m.Code_Magasin = z.Code_Magasin
+  FROM zreports z
+  LEFT JOIN magasin m ON m.Code_Magasin = z.Code_Magasin
 `;
 const escapeCsv = (value) => {
     const text = value == null ? '' : String(value);

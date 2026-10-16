@@ -26,7 +26,7 @@ export class DebugController {
   // Afficher tous les utilisateurs
   static async getUsers(req: Request, res: Response) {
     try {
-      const users = await DatabaseService.query('SELECT id, Login, Nom, Prenom, Email, Is_Admin FROM Users');
+      const users = await DatabaseService.query('SELECT id, Login, Nom, Prenom, Email, Is_Admin FROM users');
       res.json({
         success: true,
         users: users
@@ -45,7 +45,7 @@ export class DebugController {
     try {
       const { login } = req.body;
       
-      const deleteQuery = 'DELETE FROM Users WHERE Login = ?';
+      const deleteQuery = 'DELETE FROM users WHERE Login = ?';
       await DatabaseService.query(deleteQuery, [login]);
       
       res.json({
@@ -97,7 +97,7 @@ export class DebugController {
       
       const query = `
         SELECT id, Login, Nom, Prenom, Email, Is_Admin
-        FROM Users
+        FROM users
         WHERE Login = ?
       `;
       
@@ -140,7 +140,7 @@ export class DebugController {
       const hashedPassword = await hashPassword(password);
       
       const updateQuery = `
-        UPDATE Users SET Password = ?, Derniere_MAJ = CURDATE()
+        UPDATE users SET Password = ?, Derniere_MAJ = CURDATE()
         WHERE Login = ?
       `;
       
@@ -167,7 +167,7 @@ export class DebugController {
       const hashedPassword = await hashPassword(password);
       
       const insertQuery = `
-        INSERT INTO Users (Login, Password, Nom, Prenom, Email, Is_Admin, Derniere_MAJ)
+        INSERT INTO users (Login, Password, Nom, Prenom, Email, Is_Admin, Derniere_MAJ)
         VALUES (?, ?, ?, ?, ?, ?, NOW())
       `;
       
@@ -189,7 +189,7 @@ export class DebugController {
   // Afficher la structure de la table users
   static async getUsersTableStructure(req: Request, res: Response) {
     try {
-      const structure = await DatabaseService.query('DESCRIBE Users');
+      const structure = await DatabaseService.query('DESCRIBE users');
       res.json({
         success: true,
         structure: structure

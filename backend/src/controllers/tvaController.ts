@@ -7,7 +7,7 @@ export class TvaController {
     try {
       const query = `
         SELECT TVA_ID, Taux, Description, Derniere_MAJ
-        FROM TVA
+        FROM tva
         ORDER BY Taux ASC
       `;
 
@@ -35,7 +35,7 @@ export class TvaController {
 
       const query = `
         SELECT TVA_ID, Taux, Description, Derniere_MAJ
-        FROM TVA
+        FROM tva
         WHERE TVA_ID = ?
       `;
 
@@ -67,7 +67,7 @@ export class TvaController {
     try {
       const query = `
         SELECT TVA_ID, Taux, Description, Derniere_MAJ
-        FROM TVA
+        FROM tva
         ORDER BY Taux ASC
       `;
 
@@ -106,7 +106,7 @@ export class TvaController {
           Description as 'Description',
           Taux as 'Taux (%)',
           DATE_FORMAT(Derniere_MAJ, '%d/%m/%Y') as 'Dernière MAJ'
-        FROM TVA
+        FROM tva
         ${whereClause}
         ORDER BY Taux ASC
       `;
@@ -150,7 +150,7 @@ export class TvaController {
       }
 
       const tvaQuery = `
-        SELECT Taux FROM TVA WHERE TVA_ID = ?
+        SELECT Taux FROM tva WHERE TVA_ID = ?
       `;
 
       const result = await DatabaseService.query(tvaQuery, [idTva]);

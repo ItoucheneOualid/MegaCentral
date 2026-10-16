@@ -113,7 +113,7 @@ async function getExistingRow(
   keyValue: string | number | boolean
 ): Promise<RowDataPacket | undefined> {
   const [rows] = await connection.execute<RowDataPacket[]>(
-    `SELECT * FROM ${quoteIdentifier(table)} WHERE ${quoteIdentifier(primaryKey)} = ? LIMIT 1 FOR UPDATE`,
+    `SELECT * FROM ${quoteIdentifier(table.toLowerCase())} WHERE ${quoteIdentifier(primaryKey)} = ? LIMIT 1 FOR UPDATE`,
     [keyValue]
   );
   return rows[0];
@@ -238,7 +238,7 @@ export const importMegaCaisseBatch = async (
       `SELECT TABLE_NAME, COLUMN_NAME
        FROM INFORMATION_SCHEMA.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (?)`,
-      [tableEntries.map(([table]) => table)]
+      [tableEntries.map(([table]) => table.toLowerCase())]
     );
     const [primaryKeyRows] = await connection.query<RowDataPacket[]>(
       `SELECT TABLE_NAME, COLUMN_NAME
@@ -246,7 +246,7 @@ export const importMegaCaisseBatch = async (
        WHERE TABLE_SCHEMA = DATABASE()
          AND CONSTRAINT_NAME = 'PRIMARY'
          AND TABLE_NAME IN (?)`,
-      [tableEntries.map(([table]) => table)]
+      [tableEntries.map(([table]) => table.toLowerCase())]
     );
     const columnsByTable = new Map<string, Set<string>>();
     const primaryKeysByTable = new Map<string, Set<string>>();
@@ -464,7 +464,7 @@ export const importMegaCaisseBatch = async (
 
         if (table === 'Magasin' && row.Code_Magasin) {
           const [storeRows] = await connection.execute<RowDataPacket[]>(
-            'SELECT id FROM Magasin WHERE Code_Magasin = ? LIMIT 1 FOR UPDATE',
+            'SELECT id FROM magasin WHERE Code_Magasin = ? LIMIT 1 FOR UPDATE',
             [row.Code_Magasin]
           );
           if (
@@ -485,7 +485,7 @@ export const importMegaCaisseBatch = async (
 
         if (table === 'Users' && row.Login) {
           const [userRows] = await connection.execute<RowDataPacket[]>(
-            'SELECT id FROM Users WHERE Login = ? LIMIT 1 FOR UPDATE',
+            'SELECT id FROM users WHERE Login = ? LIMIT 1 FOR UPDATE',
             [row.Login]
           );
           if (userRows[0] && String(userRows[0].id) !== String(keyValue)) {
@@ -532,7 +532,7 @@ export const importMegaCaisseBatch = async (
               .join(', ')
           : `${quoteIdentifier(primaryKey)} = VALUES(${quoteIdentifier(primaryKey)})`;
         const insertSql = `
-          INSERT INTO ${quoteIdentifier(table)}
+          INSERT INTO ${quoteIdentifier(table.toLowerCase())}
             (${rowColumns.map(quoteIdentifier).join(', ')})
           VALUES (${rowColumns.map(() => '?').join(', ')})
           ON DUPLICATE KEY UPDATE ${updateClause}

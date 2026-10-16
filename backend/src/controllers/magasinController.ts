@@ -10,7 +10,7 @@ export class MagasinController {
           Code_Magasin AS code_magasin,
           Nom_Magasin AS nom_magasin,
           Derniere_MAJ AS derniere_maj
-        FROM Magasin
+        FROM magasin
         ORDER BY Nom_Magasin
       `);
 
@@ -44,8 +44,8 @@ export class MagasinController {
           z.Nbr_Tickets AS nbTickets,
           z.CA_TTC_Jour AS totalTTC,
           z.PDF_Base64 AS pdfBase64
-        FROM Zreports z
-        LEFT JOIN Magasin m ON m.Code_Magasin = z.Code_Magasin
+        FROM zreports z
+        LEFT JOIN magasin m ON m.Code_Magasin = z.Code_Magasin
         WHERE z.Code_Magasin = ?
         ORDER BY z.Date DESC, z.id DESC
         `,

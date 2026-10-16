@@ -4,11 +4,11 @@ exports.CommandesController = void 0;
 const databaseService_1 = require("../services/databaseService");
 class CommandesController {
     static async getNextCommandeId() {
-        const result = await databaseService_1.DatabaseService.query('SELECT MAX(CFCLEUNIK) AS maxId FROM BC_FRN');
+        const result = await databaseService_1.DatabaseService.query('SELECT MAX(CFCLEUNIK) AS maxId FROM bc_frn');
         return Number(result[0]?.maxId || 0) + 1;
     }
     static async getNextLigneId() {
-        const result = await databaseService_1.DatabaseService.query('SELECT MAX(BLCLEUNIK) AS maxId FROM BC_Lignes');
+        const result = await databaseService_1.DatabaseService.query('SELECT MAX(BLCLEUNIK) AS maxId FROM bc_lignes');
         return Number(result[0]?.maxId || 0) + 1;
     }
     static async getFournisseurs(req, res) {
@@ -84,7 +84,7 @@ class CommandesController {
           bc.Total_Tva AS montantTVA,
           bc.Total_TTC AS montantTTC,
           bc.Remarques AS notes
-        FROM BC_FRN bc
+        FROM bc_frn bc
         ORDER BY bc.Date_Commande DESC
       `);
             for (const commande of commandes) {
@@ -101,7 +101,7 @@ class CommandesController {
             Nature AS nature,
             Ligne_no AS ligneNo,
             Code2 AS code2
-          FROM BC_Lignes
+          FROM bc_lignes
           WHERE CFCLEUNIK = ?
           ORDER BY Ligne_no ASC
           `, [commande.id]);
@@ -137,7 +137,7 @@ class CommandesController {
           bc.Total_Tva AS montantTVA,
           bc.Total_TTC AS montantTTC,
           bc.Remarques AS notes
-        FROM BC_FRN bc
+        FROM bc_frn bc
         WHERE bc.CFCLEUNIK = ?
         `, [id]);
             if (commandes.length === 0) {
@@ -160,7 +160,7 @@ class CommandesController {
           Nature AS nature,
           Ligne_no AS ligneNo,
           Code2 AS code2
-        FROM BC_Lignes
+        FROM bc_lignes
         WHERE CFCLEUNIK = ?
         ORDER BY Ligne_no ASC
         `, [id]);
@@ -224,7 +224,7 @@ class CommandesController {
                 ? statut.charAt(0)
                 : 'N';
             await databaseService_1.DatabaseService.query(`
-        INSERT INTO BC_FRN (
+        INSERT INTO bc_frn (
           CFCLEUNIK,
           FRCLEUNIK,
           Fournis_No,
@@ -267,7 +267,7 @@ class CommandesController {
                 const tauxTVA = Number(ligne.tauxTVA || 21);
                 const currentLigneId = ligneId++;
                 await databaseService_1.DatabaseService.query(`
-          INSERT INTO BC_Lignes (
+          INSERT INTO bc_lignes (
             BLCLEUNIK,
             CCCLEUNIK,
             CFCLEUNIK,
@@ -316,7 +316,7 @@ class CommandesController {
           bc.Total_Tva AS montantTVA,
           bc.Total_TTC AS montantTTC,
           bc.Remarques AS notes
-        FROM BC_FRN bc
+        FROM bc_frn bc
         WHERE bc.CFCLEUNIK = ?
         `, [commandeId]);
             const createdCommande = createdCommandes[0];
@@ -333,7 +333,7 @@ class CommandesController {
           Nature AS nature,
           Ligne_no AS ligneNo,
           Code2 AS code2
-        FROM BC_Lignes
+        FROM bc_lignes
         WHERE CFCLEUNIK = ?
         ORDER BY Ligne_no ASC
         `, [commandeId]);
@@ -364,7 +364,7 @@ class CommandesController {
             }
             const existing = await databaseService_1.DatabaseService.query(`
         SELECT Etat
-        FROM BC_FRN
+        FROM bc_frn
         WHERE CFCLEUNIK = ?
         LIMIT 1
         `, [id]);
@@ -382,7 +382,7 @@ class CommandesController {
                 });
             }
             await databaseService_1.DatabaseService.query(`
-        UPDATE BC_FRN
+        UPDATE bc_frn
         SET Etat = ?, Derniere_MAJ = CURDATE()
         WHERE CFCLEUNIK = ?
         `, [statut, id]);
@@ -418,7 +418,7 @@ class CommandesController {
                     error: 'La commande doit contenir au moins une ligne',
                 });
             }
-            const existing = await databaseService_1.DatabaseService.query('SELECT Etat FROM BC_FRN WHERE CFCLEUNIK = ?', [id]);
+            const existing = await databaseService_1.DatabaseService.query('SELECT Etat FROM bc_frn WHERE CFCLEUNIK = ?', [id]);
             if (existing.length === 0) {
                 return res.status(404).json({
                     success: false,
@@ -458,7 +458,7 @@ class CommandesController {
                 totalTTC += ligneTTC;
             }
             await databaseService_1.DatabaseService.query(`
-        UPDATE BC_FRN
+        UPDATE bc_frn
         SET
           FRCLEUNIK = ?,
           Fournis_No = ?,
@@ -489,14 +489,14 @@ class CommandesController {
                 notes || null,
                 id,
             ]);
-            await databaseService_1.DatabaseService.query('DELETE FROM BC_Lignes WHERE CFCLEUNIK = ?', [
+            await databaseService_1.DatabaseService.query('DELETE FROM bc_lignes WHERE CFCLEUNIK = ?', [
                 id,
             ]);
             let ligneId = await CommandesController.getNextLigneId();
             for (const [index, ligne] of lignes.entries()) {
                 const currentLigneId = ligneId++;
                 await databaseService_1.DatabaseService.query(`
-          INSERT INTO BC_Lignes (
+          INSERT INTO bc_lignes (
             BLCLEUNIK,
             CCCLEUNIK,
             CFCLEUNIK,
@@ -549,10 +549,10 @@ class CommandesController {
     static async deleteCommande(req, res) {
         try {
             const { id } = req.params;
-            await databaseService_1.DatabaseService.query('DELETE FROM BC_Lignes WHERE CFCLEUNIK = ?', [
+            await databaseService_1.DatabaseService.query('DELETE FROM bc_lignes WHERE CFCLEUNIK = ?', [
                 id,
             ]);
-            await databaseService_1.DatabaseService.query('DELETE FROM BC_FRN WHERE CFCLEUNIK = ?', [
+            await databaseService_1.DatabaseService.query('DELETE FROM bc_frn WHERE CFCLEUNIK = ?', [
                 id,
             ]);
             res.json({
@@ -580,7 +580,7 @@ class CommandesController {
           bc.Total_HT_Net AS 'Montant HT',
           bc.Total_Tva AS 'Montant TVA',
           bc.Total_TTC AS 'Montant TTC'
-        FROM BC_FRN bc
+        FROM bc_frn bc
         ORDER BY bc.Date_Commande DESC
       `);
             if (commandes.length === 0) {

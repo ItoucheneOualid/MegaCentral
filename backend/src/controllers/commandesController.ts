@@ -4,14 +4,14 @@ import { DatabaseService } from '../services/databaseService';
 export class CommandesController {
   private static async getNextCommandeId(): Promise<number> {
     const result = await DatabaseService.query(
-      'SELECT MAX(CFCLEUNIK) AS maxId FROM BC_FRN'
+      'SELECT MAX(CFCLEUNIK) AS maxId FROM bc_frn'
     );
     return Number(result[0]?.maxId || 0) + 1;
   }
 
   private static async getNextLigneId(): Promise<number> {
     const result = await DatabaseService.query(
-      'SELECT MAX(BLCLEUNIK) AS maxId FROM BC_Lignes'
+      'SELECT MAX(BLCLEUNIK) AS maxId FROM bc_lignes'
     );
     return Number(result[0]?.maxId || 0) + 1;
   }
@@ -91,7 +91,7 @@ export class CommandesController {
           bc.Total_Tva AS montantTVA,
           bc.Total_TTC AS montantTTC,
           bc.Remarques AS notes
-        FROM BC_FRN bc
+        FROM bc_frn bc
         ORDER BY bc.Date_Commande DESC
       `);
 
@@ -110,7 +110,7 @@ export class CommandesController {
             Nature AS nature,
             Ligne_no AS ligneNo,
             Code2 AS code2
-          FROM BC_Lignes
+          FROM bc_lignes
           WHERE CFCLEUNIK = ?
           ORDER BY Ligne_no ASC
           `,
@@ -152,7 +152,7 @@ export class CommandesController {
           bc.Total_Tva AS montantTVA,
           bc.Total_TTC AS montantTTC,
           bc.Remarques AS notes
-        FROM BC_FRN bc
+        FROM bc_frn bc
         WHERE bc.CFCLEUNIK = ?
         `,
         [id]
@@ -181,7 +181,7 @@ export class CommandesController {
           Nature AS nature,
           Ligne_no AS ligneNo,
           Code2 AS code2
-        FROM BC_Lignes
+        FROM bc_lignes
         WHERE CFCLEUNIK = ?
         ORDER BY Ligne_no ASC
         `,
@@ -270,7 +270,7 @@ export class CommandesController {
 
       await DatabaseService.query(
         `
-        INSERT INTO BC_FRN (
+        INSERT INTO bc_frn (
           CFCLEUNIK,
           FRCLEUNIK,
           Fournis_No,
@@ -318,7 +318,7 @@ export class CommandesController {
 
         await DatabaseService.query(
           `
-          INSERT INTO BC_Lignes (
+          INSERT INTO bc_lignes (
             BLCLEUNIK,
             CCCLEUNIK,
             CFCLEUNIK,
@@ -371,7 +371,7 @@ export class CommandesController {
           bc.Total_Tva AS montantTVA,
           bc.Total_TTC AS montantTTC,
           bc.Remarques AS notes
-        FROM BC_FRN bc
+        FROM bc_frn bc
         WHERE bc.CFCLEUNIK = ?
         `,
         [commandeId]
@@ -393,7 +393,7 @@ export class CommandesController {
           Nature AS nature,
           Ligne_no AS ligneNo,
           Code2 AS code2
-        FROM BC_Lignes
+        FROM bc_lignes
         WHERE CFCLEUNIK = ?
         ORDER BY Ligne_no ASC
         `,
@@ -431,7 +431,7 @@ export class CommandesController {
       const existing = await DatabaseService.query(
         `
         SELECT Etat
-        FROM BC_FRN
+        FROM bc_frn
         WHERE CFCLEUNIK = ?
         LIMIT 1
         `,
@@ -456,7 +456,7 @@ export class CommandesController {
 
       await DatabaseService.query(
         `
-        UPDATE BC_FRN
+        UPDATE bc_frn
         SET Etat = ?, Derniere_MAJ = CURDATE()
         WHERE CFCLEUNIK = ?
         `,
@@ -509,7 +509,7 @@ export class CommandesController {
       }
 
       const existing = await DatabaseService.query(
-        'SELECT Etat FROM BC_FRN WHERE CFCLEUNIK = ?',
+        'SELECT Etat FROM bc_frn WHERE CFCLEUNIK = ?',
         [id]
       );
 
@@ -561,7 +561,7 @@ export class CommandesController {
 
       await DatabaseService.query(
         `
-        UPDATE BC_FRN
+        UPDATE bc_frn
         SET
           FRCLEUNIK = ?,
           Fournis_No = ?,
@@ -595,7 +595,7 @@ export class CommandesController {
         ]
       );
 
-      await DatabaseService.query('DELETE FROM BC_Lignes WHERE CFCLEUNIK = ?', [
+      await DatabaseService.query('DELETE FROM bc_lignes WHERE CFCLEUNIK = ?', [
         id,
       ]);
 
@@ -606,7 +606,7 @@ export class CommandesController {
 
         await DatabaseService.query(
           `
-          INSERT INTO BC_Lignes (
+          INSERT INTO bc_lignes (
             BLCLEUNIK,
             CCCLEUNIK,
             CFCLEUNIK,
@@ -663,11 +663,11 @@ export class CommandesController {
     try {
       const { id } = req.params;
 
-      await DatabaseService.query('DELETE FROM BC_Lignes WHERE CFCLEUNIK = ?', [
+      await DatabaseService.query('DELETE FROM bc_lignes WHERE CFCLEUNIK = ?', [
         id,
       ]);
 
-      await DatabaseService.query('DELETE FROM BC_FRN WHERE CFCLEUNIK = ?', [
+      await DatabaseService.query('DELETE FROM bc_frn WHERE CFCLEUNIK = ?', [
         id,
       ]);
 
@@ -696,7 +696,7 @@ export class CommandesController {
           bc.Total_HT_Net AS 'Montant HT',
           bc.Total_Tva AS 'Montant TVA',
           bc.Total_TTC AS 'Montant TTC'
-        FROM BC_FRN bc
+        FROM bc_frn bc
         ORDER BY bc.Date_Commande DESC
       `);
 
