@@ -60,7 +60,7 @@ router.post('/forgot-password', async (req, res) => {
     const rows = await DatabaseService.query(
       `
       SELECT id, Login, Nom, Prenom, Email, Password
-      FROM Users
+      FROM users
       WHERE Email = ? OR Login = ?
       LIMIT 1
       `,
@@ -179,7 +179,7 @@ router.post('/reset-password', async (req, res) => {
     }
 
     const rows = await DatabaseService.query(
-      'SELECT id, Password FROM Users WHERE id = ? LIMIT 1',
+      'SELECT id, Password FROM users WHERE id = ? LIMIT 1',
       [decoded.userId]
     );
     if (rows.length === 0) {
@@ -205,7 +205,7 @@ router.post('/reset-password', async (req, res) => {
 
     await DatabaseService.update(
       `
-      UPDATE Users
+      UPDATE users
       SET Password = ?,
           Derniere_MAJ = CURDATE()
       WHERE id = ?

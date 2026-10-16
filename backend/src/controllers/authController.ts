@@ -56,7 +56,7 @@ export class AuthController {
           Voir_prix_Achat,
           Is_Admin,
           Derniere_Connexion_Time
-        FROM Users
+        FROM users
         WHERE Login = ?
         LIMIT 1
       `;
@@ -89,13 +89,13 @@ export class AuthController {
         !/^\$2[aby]\$/.test(user.Password)
       ) {
         await DatabaseService.query(
-          "UPDATE Users SET Password = ?, Derniere_MAJ = CURDATE() WHERE id = ?",
+          "UPDATE users SET Password = ?, Derniere_MAJ = CURDATE() WHERE id = ?",
           [await hashPassword(password), user.id]
         );
       }
 
       await DatabaseService.query(
-        "UPDATE Users SET Derniere_Connexion_Time = NOW() WHERE id = ?",
+        "UPDATE users SET Derniere_Connexion_Time = NOW() WHERE id = ?",
         [user.id]
       );
 
@@ -174,7 +174,7 @@ export class AuthController {
           Email,
           Voir_prix_Achat,
           Is_Admin
-        FROM Users
+        FROM users
         WHERE id = ?
         LIMIT 1
       `;
@@ -238,7 +238,7 @@ export class AuthController {
           Voir_prix_Achat,
           Is_Admin,
           Derniere_Connexion_Time
-        FROM Users
+        FROM users
         WHERE id = ?
         LIMIT 1
       `;
@@ -305,7 +305,7 @@ export class AuthController {
 
       await DatabaseService.query(
         `
-          UPDATE Users
+          UPDATE users
           SET Nom = ?, Prenom = ?, Email = ?
           WHERE id = ?
         `,
@@ -323,7 +323,7 @@ export class AuthController {
             Voir_prix_Achat,
             Is_Admin,
             Derniere_Connexion_Time
-          FROM Users
+          FROM users
           WHERE id = ?
           LIMIT 1
         `,

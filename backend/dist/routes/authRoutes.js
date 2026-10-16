@@ -36,7 +36,7 @@ router.post('/forgot-password', async (req, res) => {
         }
         const rows = await databaseService_1.DatabaseService.query(`
       SELECT id, Login, Nom, Prenom, Email, Password
-      FROM Users
+      FROM users
       WHERE Email = ? OR Login = ?
       LIMIT 1
       `, [identifier, identifier]);
@@ -119,7 +119,7 @@ router.post('/reset-password', async (req, res) => {
                 message: 'Lien invalide, expiré ou déjà utilisé',
             });
         }
-        const rows = await databaseService_1.DatabaseService.query('SELECT id, Password FROM Users WHERE id = ? LIMIT 1', [decoded.userId]);
+        const rows = await databaseService_1.DatabaseService.query('SELECT id, Password FROM users WHERE id = ? LIMIT 1', [decoded.userId]);
         if (rows.length === 0) {
             return res.status(400).json({
                 success: false,
@@ -139,7 +139,7 @@ router.post('/reset-password', async (req, res) => {
         }
         const hashedPassword = await (0, passwordHash_1.hashPassword)(password);
         await databaseService_1.DatabaseService.update(`
-      UPDATE Users
+      UPDATE users
       SET Password = ?,
           Derniere_MAJ = CURDATE()
       WHERE id = ?

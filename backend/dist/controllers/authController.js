@@ -50,7 +50,7 @@ class AuthController {
           Voir_prix_Achat,
           Is_Admin,
           Derniere_Connexion_Time
-        FROM Users
+        FROM users
         WHERE Login = ?
         LIMIT 1
       `;
@@ -72,9 +72,9 @@ class AuthController {
             if (typeof user.Password === "string" &&
                 !user.Password.startsWith("s1$") &&
                 !/^\$2[aby]\$/.test(user.Password)) {
-                await databaseService_1.default.query("UPDATE Users SET Password = ?, Derniere_MAJ = CURDATE() WHERE id = ?", [await (0, passwordHash_1.hashPassword)(password), user.id]);
+                await databaseService_1.default.query("UPDATE users SET Password = ?, Derniere_MAJ = CURDATE() WHERE id = ?", [await (0, passwordHash_1.hashPassword)(password), user.id]);
             }
-            await databaseService_1.default.query("UPDATE Users SET Derniere_Connexion_Time = NOW() WHERE id = ?", [user.id]);
+            await databaseService_1.default.query("UPDATE users SET Derniere_Connexion_Time = NOW() WHERE id = ?", [user.id]);
             const role = user.Is_Admin === 1 || user.Is_Admin === "1"
                 ? "admin"
                 : "standard";
@@ -136,7 +136,7 @@ class AuthController {
           Email,
           Voir_prix_Achat,
           Is_Admin
-        FROM Users
+        FROM users
         WHERE id = ?
         LIMIT 1
       `;
@@ -191,7 +191,7 @@ class AuthController {
           Voir_prix_Achat,
           Is_Admin,
           Derniere_Connexion_Time
-        FROM Users
+        FROM users
         WHERE id = ?
         LIMIT 1
       `;
@@ -247,7 +247,7 @@ class AuthController {
                 });
             }
             await databaseService_1.default.query(`
-          UPDATE Users
+          UPDATE users
           SET Nom = ?, Prenom = ?, Email = ?
           WHERE id = ?
         `, [nom, prenom, email, currentUser.userId]);
@@ -261,7 +261,7 @@ class AuthController {
             Voir_prix_Achat,
             Is_Admin,
             Derniere_Connexion_Time
-          FROM Users
+          FROM users
           WHERE id = ?
           LIMIT 1
         `, [currentUser.userId]);
