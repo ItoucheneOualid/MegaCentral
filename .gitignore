@@ -59,3 +59,7 @@ Thumbs.db
 # Local-only generated folders
 /backend/db_backups/
 /frontend/frontend/
+
+# Aiven / diagnostics locaux
+/backend/ca.pem
+/backend/diagnostic_result.json
