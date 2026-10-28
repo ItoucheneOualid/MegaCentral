@@ -41,6 +41,9 @@ DROP TRIGGER IF EXISTS trg_mc_bc_frn_bu;
 -- ALTER TABLE familles2 DROP CHECK chk_mc_familles2_periode;  -- si ajoutés
 DROP FUNCTION IF EXISTS mc_clean_date;
 DROP FUNCTION IF EXISTS mc_clean_num;
+DROP FUNCTION IF EXISTS mc_clean_int;
+DROP TRIGGER IF EXISTS trg_mc_barcodes_bi;
+DROP TRIGGER IF EXISTS trg_mc_barcodes_bu;
 
 -- 2. Alias de casse (les tables réelles ne sont pas touchées)
 DROP VIEW IF EXISTS `TVA`;
@@ -55,6 +58,7 @@ ALTER TABLE articles
   MODIFY COLUMN Derniere_MAJ     DATE NULL DEFAULT NULL,
   MODIFY COLUMN Vidange_Code     DECIMAL(12,2) NULL DEFAULT NULL;
 ALTER TABLE clients MODIFY COLUMN Date_Entree DATE NULL DEFAULT NULL;
+ALTER TABLE barcodes MODIFY COLUMN Vidange_Code INT NULL DEFAULT NULL;
 ALTER TABLE articles MODIFY COLUMN Code_Barres VARCHAR(15) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL;
 ALTER TABLE barcodes MODIFY COLUMN CodeBarre VARCHAR(15) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL;
 ALTER TABLE ventes
