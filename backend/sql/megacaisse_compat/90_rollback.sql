@@ -18,7 +18,8 @@ SELECT COUNT(*) AS dates_non_iso FROM (
   UNION ALL SELECT Echeance FROM tickets
   UNION ALL SELECT Date_Commande FROM bc_frn UNION ALL SELECT Date_Livraison FROM bc_frn) x
 WHERE v IS NOT NULL AND v NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
-SELECT COUNT(*) AS vidange_code_non_numerique FROM articles
+SELECT COUNT(*) AS codes_barres_trop_longs FROM articles WHERE CHAR_LENGTH(Code_Barres) > 15;  -- doit valoir 0
+SELECT COUNT(*) AS codebarre_trop_longs FROM barcodes WHERE CHAR_LENGTH(CodeBarre) > 15;        -- doit valoir 0
  WHERE Vidange_Code IS NOT NULL AND Vidange_Code NOT REGEXP '^-?[0-9]+([.][0-9]+)?$';  -- doit valoir 0
 
 -- 1. Retirer les protections d'import
@@ -54,6 +55,8 @@ ALTER TABLE articles
   MODIFY COLUMN Derniere_MAJ     DATE NULL DEFAULT NULL,
   MODIFY COLUMN Vidange_Code     DECIMAL(12,2) NULL DEFAULT NULL;
 ALTER TABLE clients MODIFY COLUMN Date_Entree DATE NULL DEFAULT NULL;
+ALTER TABLE articles MODIFY COLUMN Code_Barres VARCHAR(15) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL;
+ALTER TABLE barcodes MODIFY COLUMN CodeBarre VARCHAR(15) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL;
 ALTER TABLE ventes
   MODIFY COLUMN Echeance DATE NULL DEFAULT NULL,
   MODIFY COLUMN Liv_Date DATE NULL DEFAULT NULL;
