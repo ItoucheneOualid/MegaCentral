@@ -9,7 +9,7 @@ USE idmegacentral_v14;
 SELECT COUNT(*) AS zreports_total_cash_null FROM zreports WHERE Total_Cash IS NULL;   -- NULL non convertible en NOT NULL sans inventer 0
 SELECT COUNT(*) AS dates_non_iso FROM (
   SELECT Promo_Date_Debut AS v FROM articles UNION ALL SELECT Promo_Date_Fin FROM articles
-  UNION ALL SELECT Periode_du FROM familles2 UNION ALL SELECT Periode_au FROM familles2
+  UNION ALL SELECT NULLIF(Periode_du, '') FROM familles2 UNION ALL SELECT NULLIF(Periode_au, '') FROM familles2
   UNION ALL SELECT Date_Entree FROM fournis
   UNION ALL SELECT `Date_Modifiée` FROM articles UNION ALL SELECT Date_importation FROM articles
   UNION ALL SELECT Suspendu_Date FROM articles UNION ALL SELECT Derniere_MAJ FROM articles
@@ -49,6 +49,11 @@ DROP TRIGGER IF EXISTS trg_mc_barcodes_bu;
 DROP VIEW IF EXISTS `TVA`;
 
 -- 3. Types d'origine (VARCHAR 'YYYY-MM-DD' -> DATE sans perte ; NULL reste NULL)
+-- familles2.Periode_du/au contiennent '' (migration 16) : on les remet à NULL (pas de date inventée) avant le retour en DATE.
+ALTER TABLE familles2
+  MODIFY COLUMN Periode_du VARCHAR(32) NULL DEFAULT NULL,
+  MODIFY COLUMN Periode_au VARCHAR(32) NULL DEFAULT NULL;
+UPDATE familles2 SET Periode_du = NULLIF(Periode_du, ''), Periode_au = NULLIF(Periode_au, '');
 ALTER TABLE articles
   MODIFY COLUMN Promo_Date_Debut DATE NULL DEFAULT NULL,
   MODIFY COLUMN Promo_Date_Fin   DATE NULL DEFAULT NULL,
