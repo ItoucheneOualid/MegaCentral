@@ -18,6 +18,8 @@ SELECT COUNT(*) AS dates_non_iso FROM (
   UNION ALL SELECT Echeance FROM tickets
   UNION ALL SELECT Date_Commande FROM bc_frn UNION ALL SELECT Date_Livraison FROM bc_frn) x
 WHERE v IS NOT NULL AND v NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+SELECT COUNT(*) AS vidange_code_non_numerique FROM articles
+ WHERE Vidange_Code IS NOT NULL AND Vidange_Code NOT REGEXP '^-?[0-9]+([.][0-9]+)?$';  -- doit valoir 0
 
 -- 1. Retirer les protections d'import
 DROP TRIGGER IF EXISTS trg_mc_articles_bi;
@@ -37,6 +39,7 @@ DROP TRIGGER IF EXISTS trg_mc_bc_frn_bu;
 -- ALTER TABLE articles  DROP CHECK chk_mc_articles_promo;     -- si ajoutés
 -- ALTER TABLE familles2 DROP CHECK chk_mc_familles2_periode;  -- si ajoutés
 DROP FUNCTION IF EXISTS mc_clean_date;
+DROP FUNCTION IF EXISTS mc_clean_num;
 
 -- 2. Alias de casse (les tables réelles ne sont pas touchées)
 DROP VIEW IF EXISTS `TVA`;
@@ -48,7 +51,8 @@ ALTER TABLE articles
   MODIFY COLUMN `Date_Modifiée`  DATE NULL DEFAULT NULL,
   MODIFY COLUMN Date_importation DATE NULL DEFAULT NULL,
   MODIFY COLUMN Suspendu_Date    DATE NULL DEFAULT NULL,
-  MODIFY COLUMN Derniere_MAJ     DATE NULL DEFAULT NULL;
+  MODIFY COLUMN Derniere_MAJ     DATE NULL DEFAULT NULL,
+  MODIFY COLUMN Vidange_Code     DECIMAL(12,2) NULL DEFAULT NULL;
 ALTER TABLE clients MODIFY COLUMN Date_Entree DATE NULL DEFAULT NULL;
 ALTER TABLE ventes
   MODIFY COLUMN Echeance DATE NULL DEFAULT NULL,
