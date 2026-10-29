@@ -48,27 +48,6 @@ export class DatabaseService {
     }
   }
 
-  // ==================== COMMANDES (BC_FRN, BC_LINE) ====================
-  static async getCommandes() {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/commandes`);
-      return response.data;
-    } catch (error) {
-      console.error('Erreur lors de la récupération des commandes:', error);
-      throw error;
-    }
-  }
-
-  static async getCommandeById(id: string) {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/commandes/${id}`);
-      return response.data;
-    } catch (error) {
-      console.error('Erreur lors de la récupération de la commande:', error);
-      throw error;
-    }
-  }
-
   // ==================== RAPPORTS Z ====================
   static async getRapportsZ() {
     try {

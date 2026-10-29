@@ -28,7 +28,6 @@ import {
   Description,
   Category,
   Business,
-  ShoppingCart,
   LightMode,
   DarkMode,
   AccountCircle,
@@ -67,7 +66,6 @@ const Navbar: React.FC<NavbarProps> = ({ darkMode = true, setDarkMode }) => {
     { label: t.nav.factures, icon: <Description />, path: '/factures' },
     { label: t.nav.familles, icon: <Category />, path: '/familles' },
     { label: t.nav.fournisseurs, icon: <Business />, path: '/fournisseurs' },
-    { label: t.nav.commandes, icon: <ShoppingCart />, path: '/commandes' },
   ];
 
   const handleNavigation = (path: string) => {

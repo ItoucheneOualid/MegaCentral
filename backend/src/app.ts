@@ -9,7 +9,6 @@ import ticketsRoutes from './routes/tickets.routes';
 import facturesRoutes from './routes/factures.routes';
 import famillesRoutes from './routes/familles.routes';
 import fournisseursRoutes from './routes/fournisseursRoutes';
-import commandesRoutes from './routes/commandesRoutes';
 import rapportsZRoutes from './routes/rapportsZRoutes';
 import debugRoutes from './routes/debugRoutes';
 import tvaRoutes from './routes/tvaRoutes';
@@ -76,7 +75,6 @@ app.use('/api/tickets', ticketsRoutes);
 app.use('/api/factures', facturesRoutes);
 app.use('/api/familles', famillesRoutes);
 app.use('/api/fournisseurs', fournisseursRoutes);
-app.use('/api/commandes', commandesRoutes);
 app.use('/api/rapports-z', rapportsZRoutes);
 
 // Initialiser la connexion au démarrage

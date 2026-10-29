@@ -355,14 +355,45 @@ export const deleteArticle = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Supprimer d'abord les données liées à l'article
-    await pool.execute('DELETE FROM fotos WHERE ARCLEUNIK = ?', [id]);
+    const connection = await pool.getConnection();
+    let result: ResultSetHeader;
 
-    // Puis supprimer l'article
-    const [result] = await pool.execute<ResultSetHeader>(
-      'DELETE FROM articles WHERE ARCLEUNIK = ?',
-      [id]
-    );
+    try {
+      await connection.beginTransaction();
+
+      // Supprimer d'abord les données liées à l'article
+      await connection.execute('DELETE FROM fotos WHERE ARCLEUNIK = ?', [id]);
+
+      // Puis supprimer l'article
+      [result] = await connection.execute<ResultSetHeader>(
+        'DELETE FROM articles WHERE ARCLEUNIK = ?',
+        [id]
+      );
+
+      // Journal des suppressions ; ignoré si la table n'existe pas encore sur cette base
+      if (result.affectedRows > 0) {
+        try {
+          await connection.execute(
+            `INSERT INTO ART_Deleted (ARCleunik, Date_deleted)
+             VALUES (?, DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s'))
+             ON DUPLICATE KEY UPDATE Date_deleted = VALUES(Date_deleted)`,
+            [String(id)]
+          );
+        } catch (logError) {
+          if ((logError as { code?: string }).code !== 'ER_NO_SUCH_TABLE') {
+            throw logError;
+          }
+          console.warn('Table ART_Deleted absente : suppression non journalisée');
+        }
+      }
+
+      await connection.commit();
+    } catch (txError) {
+      await connection.rollback();
+      throw txError;
+    } finally {
+      connection.release();
+    }
 
     if (result.affectedRows === 0) {
       res.status(404).json({

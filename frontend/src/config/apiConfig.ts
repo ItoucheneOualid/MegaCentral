@@ -55,7 +55,6 @@ export const apiConfig = {
     magasins: `${API_BASE_URL}/magasins`,
     tickets: `${API_BASE_URL}/tickets`,
     factures: `${API_BASE_URL}/factures`,
-    commandes: `${API_BASE_URL}/commandes`,
     rapportsZ: `${API_BASE_URL}/rapportsZ`,
     tva: `${API_BASE_URL}/tva`,
     email: `${API_BASE_URL}/send-email`,
