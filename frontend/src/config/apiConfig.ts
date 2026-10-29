@@ -59,8 +59,6 @@ export const apiConfig = {
     rapportsZ: `${API_BASE_URL}/rapportsZ`,
     tva: `${API_BASE_URL}/tva`,
     email: `${API_BASE_URL}/send-email`,
-    mouvementsStock: `${API_BASE_URL}/mouvements-stock`,
-    stockMagasin: `${API_BASE_URL}/stock-magasin`,
   },
 };
 

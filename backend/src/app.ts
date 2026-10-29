@@ -16,8 +16,6 @@ import tvaRoutes from './routes/tvaRoutes';
 import magasinRoutes from './routes/magasinRoutes';
 import emailRoutes from './routes/email.routes';
 import photosRoutes from './routes/photos.routes';
-import stockMagasinRoutes from './routes/stockMagasinRoutes';
-import mouvementsStockRoutes from './routes/mouvementsStockRoutes';
 import megaCaisseSyncRoutes from './routes/megaCaisseSyncRoutes';
 import { authenticateMegaCaisse } from './middleware/apiKeyMiddleware';
 
@@ -72,12 +70,6 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Articles
 app.use('/api/articles', articlesRoutes);
-
-// Stock : on garde uniquement cette route
-app.use('/api/stock-magasin', stockMagasinRoutes);
-
-// Optionnel : garde cette route seulement si tu l’utilises vraiment
-app.use('/api/mouvements-stock', mouvementsStockRoutes);
 
 // Autres modules
 app.use('/api/tickets', ticketsRoutes);

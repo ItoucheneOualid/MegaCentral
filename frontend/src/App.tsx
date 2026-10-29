@@ -20,7 +20,6 @@ import Factures from './pages/Factures';
 import { Familles } from './pages/Familles';
 import { Fournisseurs } from './pages/Fournisseurs';
 import { Commandes } from './pages/Commandes';
-import Stock from './pages/Stock';
 import Profile from './pages/Profile';
 import { Login } from './pages/Login';
 
@@ -236,15 +235,6 @@ const AppContent: React.FC = () => {
             element={
               <AuthGuard>
                 <Commandes />
-              </AuthGuard>
-            }
-          />
-
-          <Route
-            path="/stock"
-            element={
-              <AuthGuard>
-                <Stock />
               </AuthGuard>
             }
           />
